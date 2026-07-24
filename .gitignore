@@ -1,0 +1,64 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
+
+# Local workspace metadata
+.trae/
+.tmp_online_BCI/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+build/
+.next/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Data outputs
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
+
+# Archived experiments kept locally only
+archive/
+
+# Local experiment artifacts not for remote
+reports/
+checkpoints/
+scripts/train_best_long_t_plain_cnn.py
