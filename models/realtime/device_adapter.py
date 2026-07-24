@@ -49,8 +49,13 @@ class TCPDeviceAdapter:
             self.connect()
         if self._socket is None:
             raise RuntimeError("TCP device adapter is not connected")
-        message = json.dumps({"action": action, "payload": payload}, ensure_ascii=True) + "\n"
-        self._socket.sendall(message.encode("utf-8"))
+        signal_code = payload.get("signal_code")
+        if signal_code is None:
+            return
+        # TCP device output uses the compact inference code format:
+        # 0 -> left, 1 -> right, 2 -> feet
+        message = f"{int(signal_code)}\n"
+        self._socket.sendall(message.encode("ascii"))
 
     def close(self) -> None:
         if self._socket is None:
