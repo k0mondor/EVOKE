@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 
+import { useRevealOnce } from '@/hooks/useRevealOnce'
 import { usePageMotionStore } from '@/stores/pageMotionStore'
 
 const SCENES = [
@@ -71,21 +72,17 @@ export const ApplicationPlaceholderSection = () => {
           style={{ transform: `translate3d(-${progress * Math.max((stripRef.current?.scrollWidth ?? window.innerWidth) - window.innerWidth, 0)}px, 0, 0)` }}
         >
           {SCENES.map((scene, index) => (
-            <article key={scene.label} className="flex h-screen w-[88vw] min-w-[88vw] items-end py-16">
-              <div className="grid h-full w-full grid-rows-[1fr_auto] gap-8">
+            <article key={scene.label} className="flex h-screen w-[88vw] min-w-[88vw] items-center py-10 md:py-14">
+              <div className="grid h-full w-full grid-rows-[minmax(96px,0.5fr)_auto] gap-6 md:grid-rows-[minmax(120px,0.58fr)_auto] md:gap-8">
                 <div />
                 <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
                   <div className="max-w-xl">
-                    <p className="text-xs uppercase tracking-[0.26em] text-black/32">application scenarios</p>
-                    <h2 className="mt-4 text-3xl font-medium tracking-[-0.04em] text-[#14161b] sm:text-4xl">{scene.title}</h2>
-                    <p className="mt-5 text-sm leading-7 text-black/55 sm:text-base">{scene.description}</p>
+                    <p className="text-xs uppercase tracking-[0.26em] text-white/34">application scenarios</p>
+                    <h2 className="mt-4 text-3xl font-medium tracking-[-0.04em] text-white sm:text-4xl">{scene.title}</h2>
+                    <p className="mt-5 text-sm leading-7 text-white/58 sm:text-base">{scene.description}</p>
                   </div>
 
-                  <div className="rounded-[32px] bg-white p-6 shadow-[0_14px_50px_rgba(17,17,17,0.06)] sm:p-8">
-                    <div className="mb-12 h-[260px] rounded-[28px] bg-[#f3f3f3]" />
-                    <p className="text-xs uppercase tracking-[0.24em] text-black/35">scene {index + 1}</p>
-                    <p className="mt-3 text-sm text-black/72">{scene.label}</p>
-                  </div>
+                  <ApplicationSceneCard index={index} label={scene.label} />
                 </div>
               </div>
             </article>
@@ -93,5 +90,26 @@ export const ApplicationPlaceholderSection = () => {
         </div>
       </div>
     </section>
+  )
+}
+
+interface ApplicationSceneCardProps {
+  index: number
+  label: string
+}
+
+const ApplicationSceneCard = ({ index, label }: ApplicationSceneCardProps) => {
+  const { ref, isVisible } = useRevealOnce<HTMLDivElement>()
+
+  return (
+    <div
+      ref={ref}
+      data-reveal={isVisible ? 'visible' : 'pending'}
+      className="scroll-float-card rounded-[32px] bg-white p-6 shadow-[0_14px_50px_rgba(17,17,17,0.06)] sm:p-8"
+    >
+      <div className="scroll-float-item scroll-delay-1 mb-12 h-[260px] rounded-[28px] bg-[#f3f3f3]" />
+      <p className="scroll-float-item scroll-delay-2 text-xs uppercase tracking-[0.24em] text-black/35">scene {index + 1}</p>
+      <p className="scroll-float-item scroll-delay-3 mt-3 text-sm text-black/72">{label}</p>
+    </div>
   )
 }

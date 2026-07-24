@@ -1,18 +1,4 @@
-import type { EegChannelFrame, RealtimeProbability, TopomapSnapshot } from '@/types/realtime'
-
-type RealtimeMessage =
-  | {
-      type: 'eeg_frame'
-      payload: EegChannelFrame[]
-    }
-  | {
-      type: 'mi_probs'
-      payload: RealtimeProbability[]
-    }
-  | {
-      type: 'topomap'
-      payload: TopomapSnapshot[]
-    }
+import type { RealtimeMessage } from '@/types/realtime'
 
 export interface RealtimeSocketHandlers {
   onOpen?: () => void

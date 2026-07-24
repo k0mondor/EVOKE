@@ -1,21 +1,19 @@
 import { ApplicationPlaceholderSection } from '@/components/ApplicationPlaceholderSection'
 import { DashboardSection } from '@/components/DashboardSection'
-import { GlobalBackground } from '@/components/GlobalBackground'
 import { HeroSection } from '@/components/HeroSection'
-import { useRealtimeDemo } from '@/hooks/useRealtimeDemo'
-import { useScrollMotion } from '@/hooks/useScrollMotion'
+import { RoomFocusSection } from '@/components/RoomFocusSection'
+import { useRealtimeStream } from '@/hooks/useRealtimeStream'
 
-const SECTION_IDS = ['landing', 'applications', 'dashboard']
+const SECTION_IDS = ['landing', 'room-focus', 'applications', 'dashboard']
 
 export default function Home() {
-  useRealtimeDemo()
-  useScrollMotion()
+  useRealtimeStream()
 
   return (
-    <main className="relative z-10 min-h-[300vh] bg-transparent text-white">
-      <GlobalBackground />
+    <main className="relative z-10 min-h-[300vh] bg-black text-white">
       <HeroSection sectionIds={SECTION_IDS} />
       <div className="relative">
+        <RoomFocusSection />
         <ApplicationPlaceholderSection />
         <DashboardSection />
       </div>

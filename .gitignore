@@ -10,6 +10,7 @@ Thumbs.db
 # Local workspace metadata
 .trae/
 .tmp_online_BCI/
+.tmp_zip_preview/
 
 # Python
 __pycache__/
@@ -46,6 +47,10 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+
+# Local packaged assets and root EEG captures
+*.zip
+ads1299_*.csv
 
 # Data outputs
 data/interim/*

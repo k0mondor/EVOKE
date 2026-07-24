@@ -15,6 +15,7 @@ const buildPath = (samples: number[], width: number, height: number) =>
 export const EegWaveformPanel = () => {
   const frames = useRealtimeStore((state) => state.eegFrames)
   const connected = useRealtimeStore((state) => state.connected)
+  const samplingRate = useRealtimeStore((state) => state.samplingRate)
 
   const paths = useMemo(
     () =>
@@ -34,7 +35,7 @@ export const EegWaveformPanel = () => {
     >
       <div className="mb-4 flex items-center justify-between text-xs text-black/45">
         <span>{connected ? 'stream online' : 'stream offline'}</span>
-        <span>8 channels / 500 Hz</span>
+        <span>{frames.length} channels / {samplingRate} Hz</span>
       </div>
       <div className="space-y-3">
         {paths.map((item) => (

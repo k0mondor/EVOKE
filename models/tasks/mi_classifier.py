@@ -2,11 +2,13 @@ from dataclasses import dataclass, field
 import copy
 
 import numpy as np
-import torch
-from torch import nn
-from torch.nn import functional as F
 
 from models.datasets.label_mapping import MI_CLASSES
+from models.utils.torch_compat import import_torch
+
+torch = import_torch()
+nn = torch.nn
+F = torch.nn.functional
 
 
 @dataclass(slots=True)

@@ -1,13 +1,17 @@
 import { create } from 'zustand'
 
 import type {
+  DeviceActionSnapshot,
   EegChannelFrame,
   MiClassKey,
+  PredictionSnapshot,
+  RealtimeMessage,
   RealtimeProbability,
+  SignalQualitySnapshot,
   TopomapSnapshot,
 } from '@/types/realtime'
 
-const CHANNEL_NAMES = ['Fp1', 'Fp2', 'C3', 'C4', 'P3', 'P4', 'O1', 'O2']
+const CHANNEL_NAMES = ['CH1', 'CH2', 'CH3', 'CH4', 'CH5', 'CH6', 'CH7', 'CH8']
 
 const seedWave = (phase: number, amplitude: number) =>
   Array.from({ length: 72 }, (_, index) => {
@@ -47,34 +51,81 @@ const buildTopomap = (id: TopomapSnapshot['id'], phase: number): TopomapSnapshot
   timestamp: new Date().toISOString(),
 })
 
+const buildProbabilitiesFromMap = (probabilities: Record<MiClassKey, number>): RealtimeProbability[] =>
+  (['left', 'right', 'feet'] as MiClassKey[]).map((label) => ({
+    label,
+    value: probabilities[label] ?? 0,
+  }))
+
 interface RealtimeStore {
   connected: boolean
+  samplingRate: number
   eegFrames: EegChannelFrame[]
   probabilities: RealtimeProbability[]
   topomaps: TopomapSnapshot[]
-  tick: number
+  prediction: PredictionSnapshot | null
+  signalQuality: SignalQualitySnapshot | null
+  deviceAction: DeviceActionSnapshot | null
   setConnected: (connected: boolean) => void
-  hydrateDemo: () => void
+  ingestMessage: (message: RealtimeMessage) => void
 }
 
-export const useRealtimeStore = create<RealtimeStore>((set, get) => ({
+export const useRealtimeStore = create<RealtimeStore>((set) => ({
   connected: false,
+  samplingRate: 500,
   eegFrames: buildEegFrames(0),
   probabilities: pickProbabilities(0),
   topomaps: [buildTopomap('instant', 0), buildTopomap('temporal_mean', 1.2)],
-  tick: 0,
+  prediction: null,
+  signalQuality: null,
+  deviceAction: null,
   setConnected: (connected) => set({ connected }),
-  hydrateDemo: () => {
-    const nextTick = get().tick + 1
-    const phase = nextTick * 0.28
-    set({
-      tick: nextTick,
-      eegFrames: buildEegFrames(phase),
-      probabilities: pickProbabilities(phase),
-      topomaps: [
-        buildTopomap('instant', phase),
-        buildTopomap('temporal_mean', phase * 0.68 + 0.8),
-      ],
-    })
+  ingestMessage: (message) => {
+    switch (message.type) {
+      case 'eeg_frame':
+        set({
+          samplingRate: message.payload.sampling_rate,
+          eegFrames: Object.entries(message.payload.channels).map(([channel, samples]) => ({
+            channel,
+            samples,
+          })),
+        })
+        return
+      case 'mi_probs':
+        set({
+          probabilities: buildProbabilitiesFromMap(message.payload.probabilities),
+          prediction: {
+            label: message.payload.label,
+            signalCode: message.payload.signal_code,
+            confidence: message.payload.confidence,
+            usable: message.payload.usable,
+            modelName: message.payload.model_name,
+          },
+        })
+        return
+      case 'signal_quality':
+        set({
+          signalQuality: {
+            ptp: message.payload.ptp,
+            rms: message.payload.rms,
+            usable: message.payload.usable,
+          },
+        })
+        return
+      case 'topomap':
+        set({ topomaps: message.payload })
+        return
+      case 'device_action':
+        set({
+          deviceAction: {
+            deviceId: message.payload.device_id,
+            action: message.payload.action,
+            accepted: message.payload.accepted,
+            reason: message.payload.reason,
+            signalCode: message.payload.signal_code,
+          },
+        })
+        return
+    }
   },
 }))

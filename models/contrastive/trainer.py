@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
-import torch
-from torch import nn
-from torch.nn import functional as F
+from models.utils.torch_compat import import_torch
+
+torch = import_torch()
+nn = torch.nn
+F = torch.nn.functional
 
 
 @dataclass(slots=True)

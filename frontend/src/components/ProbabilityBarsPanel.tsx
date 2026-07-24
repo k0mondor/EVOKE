@@ -11,10 +11,16 @@ const LABELS: Record<string, string> = {
 
 export const ProbabilityBarsPanel = () => {
   const probabilities = useRealtimeStore((state) => state.probabilities)
-  const active = probabilities.reduce<(typeof probabilities)[number] | null>(
-    (current, item) => (!current || item.value > current.value ? item : current),
-    null,
-  )
+  const prediction = useRealtimeStore((state) => state.prediction)
+  const signalQuality = useRealtimeStore((state) => state.signalQuality)
+  const deviceAction = useRealtimeStore((state) => state.deviceAction)
+  const active =
+    prediction
+      ? probabilities.find((item) => item.label === prediction.label) ?? null
+      : probabilities.reduce<(typeof probabilities)[number] | null>(
+          (current, item) => (!current || item.value > current.value ? item : current),
+          null,
+        )
 
   return (
     <SectionCard
@@ -30,6 +36,21 @@ export const ProbabilityBarsPanel = () => {
         <div>
           <p className="text-xs uppercase tracking-[0.22em] text-black/38">dominant intent</p>
           <p className="mt-1 text-sm text-[#121318]">{active ? LABELS[active.label] : 'Awaiting stream'}</p>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-black/35">
+            {prediction
+              ? `${Math.round(prediction.confidence * 100)}% confidence / code ${prediction.signalCode} / ${prediction.usable ? 'usable' : 'hold'}`
+              : 'awaiting inference'}
+          </p>
+          {signalQuality ? (
+            <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-black/30">
+              ptp {signalQuality.ptp.toFixed(1)} / rms {signalQuality.rms.toFixed(1)}
+            </p>
+          ) : null}
+          {deviceAction ? (
+            <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-black/30">
+              device {deviceAction.action} / code {deviceAction.signalCode ?? 'none'} / {deviceAction.reason}
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="space-y-4">
