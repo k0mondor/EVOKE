@@ -753,9 +753,17 @@ a {
   margin: 0;
   color: rgb(255 255 255 / 0.42);
   font-size: 0.68rem;
-  font-weight: 600;
   letter-spacing: 0.24em;
   text-transform: uppercase;
+}
+
+.benefits-header__eyebrow {
+  font-weight: 600;
+}
+
+.benefit-card__eyebrow {
+  color: rgb(255 255 255 / 0.56);
+  font-weight: 900;
 }
 
 .benefits-header__title {
@@ -813,7 +821,7 @@ a {
 .benefit-card__heading {
   margin: 0.7rem 0 0;
   font-size: clamp(1.35rem, 1.1rem + 0.75vw, 2rem);
-  font-weight: 400;
+  font-weight: 900;
   letter-spacing: -0.04em;
   line-height: 1.05;
 }
@@ -862,6 +870,10 @@ a {
   font-size: 0.56rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.inference-job__label > span {
+  font-weight: 900;
 }
 
 .inference-job__label strong {
@@ -1007,7 +1019,7 @@ a {
   z-index: 3;
   color: rgb(255 255 255 / 0.28);
   font-size: 8px;
-  font-weight: 600;
+  font-weight: 900;
   letter-spacing: 0.16em;
   pointer-events: none;
 }
@@ -1079,7 +1091,7 @@ a {
   gap: 1rem;
   color: rgb(255 255 255 / 0.38);
   font-size: 0.52rem;
-  font-weight: 600;
+  font-weight: 900;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -1185,6 +1197,7 @@ a {
 
 .runtime-control-fields label > span {
   grid-column: 1 / -1;
+  font-weight: 900;
 }
 
 .runtime-control-fields input {

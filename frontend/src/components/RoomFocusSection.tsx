@@ -83,6 +83,7 @@ export const RoomFocusSection = forwardRef<RoomFocusSectionHandle>(function Room
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const focusTimerRef = useRef<number | undefined>(undefined)
   const switchTimerRef = useRef<number | undefined>(undefined)
+  const pendingModeRef = useRef<SecurityMode | null>(null)
   const isZoomedRef = useRef(false)
   const [isZoomed, setIsZoomed] = useState(false)
   const [isDetailsVisible, setIsDetailsVisible] = useState(false)
@@ -189,6 +190,7 @@ export const RoomFocusSection = forwardRef<RoomFocusSectionHandle>(function Room
       return
     }
 
+    pendingModeRef.current = mode
     video.playbackRate = 1
     video.currentTime = MODE_BY_ID[mode].targetTime
 
@@ -200,6 +202,7 @@ export const RoomFocusSection = forwardRef<RoomFocusSectionHandle>(function Room
   }
 
   const handleModeChange = (mode: SecurityMode) => {
+    pendingModeRef.current = mode
     setActiveMode(mode)
     setIsSwitching(true)
 
@@ -218,7 +221,15 @@ export const RoomFocusSection = forwardRef<RoomFocusSectionHandle>(function Room
     if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
       seekToMode(mode)
     } else {
-      video.addEventListener('loadedmetadata', () => seekToMode(mode), { once: true })
+      video.addEventListener(
+        'loadedmetadata',
+        () => {
+          if (pendingModeRef.current === mode) {
+            seekToMode(mode)
+          }
+        },
+        { once: true },
+      )
     }
   }
 
@@ -324,8 +335,21 @@ export const RoomFocusSection = forwardRef<RoomFocusSectionHandle>(function Room
                 preload="auto"
                 aria-hidden="true"
                 onTimeUpdate={(event) => {
+                  if (pendingModeRef.current) {
+                    return
+                  }
+
                   const mode = getSecurityModeAtTime(event.currentTarget.currentTime)
                   setActiveMode((currentMode) => (currentMode === mode ? currentMode : mode))
+                }}
+                onSeeked={() => {
+                  const pendingMode = pendingModeRef.current
+                  if (!pendingMode) {
+                    return
+                  }
+
+                  pendingModeRef.current = null
+                  setActiveMode(pendingMode)
                 }}
               />
               <div className="video-shield" aria-hidden="true" />
