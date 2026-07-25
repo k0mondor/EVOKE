@@ -18,6 +18,8 @@ class DeviceSettings:
     tcp_host: str = "127.0.0.1"
     tcp_port: int = 19001
     http_url: str = "http://127.0.0.1:19002/device-action"
+    serial_port: str = "COM3"
+    serial_baudrate: int = 115200
     timeout_s: float = 2.0
 
 
@@ -40,6 +42,8 @@ def load_app_settings() -> AppSettings:
             tcp_host=os.getenv("EEG_DEVICE_TCP_HOST", "127.0.0.1"),
             tcp_port=int(os.getenv("EEG_DEVICE_TCP_PORT", "19001")),
             http_url=os.getenv("EEG_DEVICE_HTTP_URL", "http://127.0.0.1:19002/device-action"),
+            serial_port=os.getenv("EEG_DEVICE_SERIAL_PORT", "COM3"),
+            serial_baudrate=int(os.getenv("EEG_DEVICE_SERIAL_BAUDRATE", "115200")),
             timeout_s=float(os.getenv("EEG_DEVICE_TIMEOUT_S", "2.0")),
         ),
     )
