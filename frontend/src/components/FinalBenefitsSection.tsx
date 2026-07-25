@@ -34,7 +34,7 @@ const loadSensorPositions = (): SensorPosition[] => {
 export const FinalBenefitsSection = () => {
   const { frame, connectionState, runtimeStatus, commandMessage, sendCommand } = useBrainSignal()
   const [sensorPositions, setSensorPositions] = useState<SensorPosition[]>(loadSensorPositions)
-  const [inferenceDelaySeconds, setInferenceDelaySeconds] = useState(3)
+  const [collectionWindowCount, setCollectionWindowCount] = useState(5)
   const [inferenceWindowCount, setInferenceWindowCount] = useState(5)
   const confidenceScores = [
     { label: 'Mode 1', value: frame.probabilities.mode1, tone: 'confidence-bar__fill--orange' },
@@ -43,7 +43,6 @@ export const FinalBenefitsSection = () => {
   ]
   const highestMode = confidenceScores.reduce((highest, score) => (score.value > highest.value ? score : highest))
   const isAcquiring = ['connecting', 'running'].includes(runtimeStatus.acquisitionState)
-  const inferenceBusy = ['countdown', 'collecting'].includes(runtimeStatus.inferenceState)
   const backendReady = connectionState === 'live'
   const connectionLabel =
     connectionState !== 'live'
@@ -61,10 +60,10 @@ export const FinalBenefitsSection = () => {
     feet: 'Mode 3',
   }
   const inferenceStatusLabel =
-    runtimeStatus.inferenceState === 'countdown'
-      ? `Starts in ${(runtimeStatus.delayRemainingMs / 1000).toFixed(1)}s`
-      : runtimeStatus.inferenceState === 'collecting'
-        ? `${runtimeStatus.windowsCollected} / ${runtimeStatus.windowsTarget} windows`
+    runtimeStatus.inferenceState === 'collecting'
+      ? `Collecting ${runtimeStatus.collectionWindowsCollected} / ${runtimeStatus.collectionWindowsTarget}`
+      : runtimeStatus.inferenceState === 'inferring'
+        ? `Inferring ${runtimeStatus.windowsCollected} / ${runtimeStatus.windowsTarget}`
         : runtimeStatus.inferenceState === 'complete' && runtimeStatus.finalResult
           ? `${finalModeLabels[runtimeStatus.finalResult.label] ?? runtimeStatus.finalResult.label} · ${Math.round(runtimeStatus.finalResult.confidence * 100)}%`
           : runtimeStatus.inferenceState === 'cancelled'
@@ -164,31 +163,16 @@ export const FinalBenefitsSection = () => {
                       <span>Formal inference</span>
                       <strong>{inferenceStatusLabel}</strong>
                     </div>
-                    <button
-                      type="button"
-                      className="inference-job__track"
-                      disabled={!backendReady || !isAcquiring || inferenceBusy}
-                      onClick={() =>
-                        sendCommand('start_inference', {
-                          delay_seconds: inferenceDelaySeconds,
-                          window_count: inferenceWindowCount,
-                        })
-                      }
-                    >
-                      <span
-                        className="inference-job__fill"
-                        style={{ width: `${runtimeStatus.progress * 100}%` }}
-                      />
-                      <span className="inference-job__action">
-                        {runtimeStatus.inferenceState === 'countdown'
-                          ? 'Waiting'
-                          : runtimeStatus.inferenceState === 'collecting'
-                            ? 'Inferring'
-                            : runtimeStatus.inferenceState === 'complete'
-                              ? 'Run again'
-                              : 'Start inference'}
-                      </span>
-                    </button>
+                    <div className="inference-job__state" aria-live="polite">
+                      <span />
+                      {runtimeStatus.inferenceState === 'collecting'
+                        ? 'Preparing'
+                        : runtimeStatus.inferenceState === 'inferring'
+                          ? 'Live probabilities'
+                          : runtimeStatus.inferenceState === 'complete'
+                            ? 'Result locked'
+                            : 'Starts with acquisition'}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -205,26 +189,27 @@ export const FinalBenefitsSection = () => {
                   <div className="runtime-control-panel__top">
                     <div className="runtime-control-fields">
                       <label>
-                        <span>Delay</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="60"
-                          step="1"
-                          value={inferenceDelaySeconds}
-                          onChange={(event) =>
-                            setInferenceDelaySeconds(Math.max(0, Math.min(60, Number(event.target.value) || 0)))
-                          }
-                        />
-                        <em>s</em>
-                      </label>
-                      <label>
-                        <span>Windows</span>
+                        <span>Collect windows</span>
                         <input
                           type="number"
                           min="1"
                           max="50"
                           step="1"
+                          disabled={isAcquiring}
+                          value={collectionWindowCount}
+                          onChange={(event) =>
+                            setCollectionWindowCount(Math.max(1, Math.min(50, Number(event.target.value) || 1)))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Infer windows</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          step="1"
+                          disabled={isAcquiring}
                           value={inferenceWindowCount}
                           onChange={(event) =>
                             setInferenceWindowCount(Math.max(1, Math.min(50, Number(event.target.value) || 1)))
@@ -238,7 +223,12 @@ export const FinalBenefitsSection = () => {
                         type="button"
                         className="runtime-control-button runtime-control-button--start"
                         disabled={!backendReady || isAcquiring}
-                        onClick={() => sendCommand('start_acquisition')}
+                        onClick={() =>
+                          sendCommand('start_acquisition', {
+                            collection_window_count: collectionWindowCount,
+                            inference_window_count: inferenceWindowCount,
+                          })
+                        }
                       >
                         Start acquisition
                       </button>

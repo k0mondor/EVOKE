@@ -34,14 +34,13 @@ class RealtimeHub:
     device_adapter: DeviceAdapter | None = field(default=None)
     _clients: set[WebSocket] = field(default_factory=set, init=False)
     _source_task: asyncio.Task | None = field(default=None, init=False)
-    _inference_timer_task: asyncio.Task | None = field(default=None, init=False)
     _control_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
     _status: dict[str, object] = field(default_factory=dict, init=False)
     _acquisition_state: str = field(default="idle", init=False)
     _inference_state: str = field(default="idle", init=False)
-    _inference_starts_at_ms: int | None = field(default=None, init=False)
-    _inference_delay_seconds: float = field(default=0.0, init=False)
-    _inference_windows_target: int = field(default=0, init=False)
+    _collection_windows_target: int = field(default=5, init=False)
+    _collection_windows_seen: int = field(default=0, init=False)
+    _inference_windows_target: int = field(default=5, init=False)
     _inference_probabilities: list[dict[str, float]] = field(default_factory=list, init=False)
     _inference_final_result: dict[str, object] | None = field(default=None, init=False)
     _source_error: str | None = field(default=None, init=False)
@@ -89,7 +88,26 @@ class RealtimeHub:
                 return
 
             if command == "start_acquisition":
-                started = await self.start_acquisition()
+                try:
+                    collection_window_count = max(
+                        1, min(50, int(message.get("collection_window_count", 5)))
+                    )
+                    inference_window_count = max(
+                        1, min(50, int(message.get("inference_window_count", 5)))
+                    )
+                except (TypeError, ValueError):
+                    await self._send_command_ack(
+                        websocket,
+                        command,
+                        False,
+                        "collection_window_count and inference_window_count must be numeric.",
+                    )
+                    return
+
+                started = await self.start_acquisition(
+                    collection_window_count=collection_window_count,
+                    inference_window_count=inference_window_count,
+                )
                 await self._send_command_ack(
                     websocket,
                     command,
@@ -103,42 +121,23 @@ class RealtimeHub:
                 await self._send_command_ack(websocket, command, True, "Acquisition stopped.")
                 return
 
-            if command == "start_inference":
-                if self._source_task is None or self._source_task.done():
-                    await self._send_command_ack(
-                        websocket,
-                        command,
-                        False,
-                        "Start acquisition before starting an inference run.",
-                    )
-                    return
-
-                try:
-                    delay_seconds = max(0.0, min(60.0, float(message.get("delay_seconds", 0))))
-                    window_count = max(1, min(50, int(message.get("window_count", 5))))
-                except (TypeError, ValueError):
-                    await self._send_command_ack(
-                        websocket,
-                        command,
-                        False,
-                        "delay_seconds and window_count must be numeric.",
-                    )
-                    return
-
-                await self.start_inference(delay_seconds=delay_seconds, window_count=window_count)
-                await self._send_command_ack(websocket, command, True, "Inference run scheduled.")
-                return
-
             await self._send_command_ack(websocket, command or "unknown", False, "Unknown command.")
 
-    async def start_acquisition(self) -> bool:
+    async def start_acquisition(
+        self,
+        *,
+        collection_window_count: int = 5,
+        inference_window_count: int = 5,
+    ) -> bool:
         if self._source_task is not None and not self._source_task.done():
             return False
 
-        await self._cancel_inference_timer()
         self.session = RealtimeSession()
         self._source_error = None
-        self._reset_inference_state()
+        self._reset_inference_state(
+            collection_window_count=collection_window_count,
+            inference_window_count=inference_window_count,
+        )
         if self.settings.source.mode == "tcp":
             self._acquisition_state = "connecting"
             self._source_task = asyncio.create_task(self._run_tcp_loop())
@@ -149,7 +148,6 @@ class RealtimeHub:
         return True
 
     async def stop_acquisition(self) -> None:
-        await self._cancel_inference_timer()
         task = self._source_task
         self._source_task = None
         if task is not None and not task.done():
@@ -157,21 +155,9 @@ class RealtimeHub:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 
-        if self._inference_state in {"countdown", "collecting"}:
+        if self._inference_state in {"collecting", "inferring"}:
             self._inference_state = "cancelled"
         self._acquisition_state = "stopped"
-        await self._broadcast_runtime_state()
-
-    async def start_inference(self, *, delay_seconds: float, window_count: int) -> None:
-        await self._cancel_inference_timer()
-        self._inference_delay_seconds = delay_seconds
-        self._inference_windows_target = window_count
-        self._inference_probabilities = []
-        self._inference_final_result = None
-        self._inference_starts_at_ms = self._now_ms() + int(delay_seconds * 1000)
-        self._inference_state = "countdown" if delay_seconds > 0 else "collecting"
-        if delay_seconds > 0:
-            self._inference_timer_task = asyncio.create_task(self._run_inference_countdown())
         await self._broadcast_runtime_state()
 
     async def ingest_frame(self, frame) -> None:
@@ -277,9 +263,6 @@ class RealtimeHub:
         ).model_dump()
 
     def _runtime_state_payload(self) -> dict[str, object]:
-        remaining_ms = 0
-        if self._inference_state == "countdown" and self._inference_starts_at_ms is not None:
-            remaining_ms = max(0, self._inference_starts_at_ms - self._now_ms())
         windows_collected = len(self._inference_probabilities)
         progress = (
             windows_collected / self._inference_windows_target
@@ -290,8 +273,8 @@ class RealtimeHub:
             "source_mode": self.settings.source.mode,
             "acquisition_state": self._acquisition_state,
             "inference_state": self._inference_state,
-            "delay_seconds": self._inference_delay_seconds,
-            "delay_remaining_ms": remaining_ms,
+            "collection_windows_collected": self._collection_windows_seen,
+            "collection_windows_target": self._collection_windows_target,
             "windows_collected": windows_collected,
             "windows_target": self._inference_windows_target,
             "progress": min(1.0, progress),
@@ -299,29 +282,20 @@ class RealtimeHub:
             "error": self._source_error,
         }
 
-    async def _run_inference_countdown(self) -> None:
-        try:
-            while (
-                self._inference_state == "countdown"
-                and self._inference_starts_at_ms is not None
-                and self._now_ms() < self._inference_starts_at_ms
-            ):
-                await self._broadcast_runtime_state()
-                await asyncio.sleep(0.25)
-            if self._inference_state == "countdown":
-                self._inference_state = "collecting"
-                await self._broadcast_runtime_state()
-        except asyncio.CancelledError:
-            raise
-        finally:
-            if self._inference_timer_task is asyncio.current_task():
-                self._inference_timer_task = None
-
     async def _consume_inference_events(self, events: list) -> None:
-        if self._inference_state != "collecting" or not events:
+        if self._inference_state not in {"collecting", "inferring"} or not events:
             return
 
         for event in events:
+            if self._inference_state == "collecting":
+                self._collection_windows_seen += 1
+                if self._collection_windows_seen >= self._collection_windows_target:
+                    self._inference_state = "inferring"
+                continue
+
+            if self._inference_state != "inferring":
+                break
+
             self._inference_probabilities.append(dict(event.prediction.probabilities))
             if len(self._inference_probabilities) >= self._inference_windows_target:
                 labels = tuple(self._inference_probabilities[0])
@@ -397,19 +371,16 @@ class RealtimeHub:
         )
         await self._broadcast(device_message.model_dump())
 
-    async def _cancel_inference_timer(self) -> None:
-        task = self._inference_timer_task
-        self._inference_timer_task = None
-        if task is not None and not task.done():
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-
-    def _reset_inference_state(self) -> None:
-        self._inference_state = "idle"
-        self._inference_starts_at_ms = None
-        self._inference_delay_seconds = 0.0
-        self._inference_windows_target = 0
+    def _reset_inference_state(
+        self,
+        *,
+        collection_window_count: int = 5,
+        inference_window_count: int = 5,
+    ) -> None:
+        self._inference_state = "collecting"
+        self._collection_windows_target = max(1, min(50, collection_window_count))
+        self._collection_windows_seen = 0
+        self._inference_windows_target = max(1, min(50, inference_window_count))
         self._inference_probabilities = []
         self._inference_final_result = None
 

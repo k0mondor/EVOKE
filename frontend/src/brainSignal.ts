@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 export type BrainSignalSource = 'demo' | 'device'
 export type BrainConnectionState = 'demo' | 'connecting' | 'live'
 export type AcquisitionState = 'idle' | 'connecting' | 'running' | 'stopped'
-export type InferenceState = 'idle' | 'countdown' | 'collecting' | 'complete' | 'cancelled'
+export type InferenceState = 'idle' | 'collecting' | 'inferring' | 'complete' | 'cancelled'
 
 export interface InferenceFinalResult {
   label: string
@@ -17,8 +17,8 @@ export interface BrainRuntimeStatus {
   sourceMode: string
   acquisitionState: AcquisitionState
   inferenceState: InferenceState
-  delaySeconds: number
-  delayRemainingMs: number
+  collectionWindowsCollected: number
+  collectionWindowsTarget: number
   windowsCollected: number
   windowsTarget: number
   progress: number
@@ -70,8 +70,8 @@ const INITIAL_RUNTIME_STATUS: BrainRuntimeStatus = {
   sourceMode: 'demo',
   acquisitionState: 'idle',
   inferenceState: 'idle',
-  delaySeconds: 0,
-  delayRemainingMs: 0,
+  collectionWindowsCollected: 0,
+  collectionWindowsTarget: 5,
   windowsCollected: 0,
   windowsTarget: 0,
   progress: 0,
@@ -327,8 +327,8 @@ function normalizeRuntimeStatus(value: unknown): BrainRuntimeStatus | null {
     sourceMode: String(payload.source_mode ?? 'demo'),
     acquisitionState,
     inferenceState,
-    delaySeconds: Number(payload.delay_seconds) || 0,
-    delayRemainingMs: Math.max(0, Number(payload.delay_remaining_ms) || 0),
+    collectionWindowsCollected: Math.max(0, Number(payload.collection_windows_collected) || 0),
+    collectionWindowsTarget: Math.max(1, Number(payload.collection_windows_target) || 5),
     windowsCollected: Math.max(0, Number(payload.windows_collected) || 0),
     windowsTarget: Math.max(0, Number(payload.windows_target) || 0),
     progress: clamp(Number(payload.progress) || 0, 0, 1),
@@ -407,7 +407,7 @@ export function useBrainSignal() {
             if (nextRuntimeStatus) {
               runtimeStatusRef.current = nextRuntimeStatus
               setRuntimeStatus(nextRuntimeStatus)
-              if (nextRuntimeStatus.inferenceState === 'countdown') {
+              if (nextRuntimeStatus.inferenceState === 'collecting') {
                 setFrame((current) => ({
                   ...current,
                   probabilities: { mode1: 0, mode2: 0, mode3: 0 },
@@ -446,7 +446,7 @@ export function useBrainSignal() {
             }
             lastEegVisualUpdate = now
           }
-          if (data?.type === 'mi_probs' && runtimeStatusRef.current.inferenceState !== 'collecting') {
+          if (data?.type === 'mi_probs' && runtimeStatusRef.current.inferenceState !== 'inferring') {
             return
           }
 
