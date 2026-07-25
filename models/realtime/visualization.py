@@ -17,23 +17,18 @@ def build_topomap_snapshots(window: EEGWindow) -> list[TopomapSnapshot]:
     timestamp = datetime.fromtimestamp(window.timestamp_ms / 1000.0, tz=timezone.utc).isoformat()
 
     return [
-        TopomapSnapshot(id="instant", values=_expand_to_grid(instant_source), timestamp=timestamp),
-        TopomapSnapshot(id="temporal_mean", values=_expand_to_grid(temporal_mean_source), timestamp=timestamp),
+        TopomapSnapshot(id="instant", values=_normalize_channels(instant_source), timestamp=timestamp),
+        TopomapSnapshot(id="temporal_mean", values=_normalize_channels(temporal_mean_source), timestamp=timestamp),
     ]
 
 
-def _expand_to_grid(values: np.ndarray, target_size: int = 12) -> list[float]:
+def _normalize_channels(values: np.ndarray) -> list[float]:
     source = np.asarray(values, dtype=np.float64)
     if source.size == 0:
-        return [0.0] * target_size
-    if source.size == target_size:
-        normalized = source
-    else:
-        x_source = np.linspace(0.0, 1.0, num=source.size)
-        x_target = np.linspace(0.0, 1.0, num=target_size)
-        normalized = np.interp(x_target, x_source, source)
+        return []
 
-    scale = float(np.max(np.abs(normalized)))
+    centered = source - float(np.mean(source))
+    scale = float(np.max(np.abs(centered)))
     if scale > 1e-9:
-        normalized = normalized / scale
-    return np.asarray(normalized, dtype=np.float32).tolist()
+        centered = centered / scale
+    return np.asarray(centered, dtype=np.float32).tolist()
