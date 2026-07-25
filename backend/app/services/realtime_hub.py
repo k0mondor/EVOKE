@@ -25,6 +25,7 @@ from models.realtime.tcp_receiver import EXPECTED_FRAME_SIZE, TCPReceiver, TCPRe
 
 
 logger = logging.getLogger(__name__)
+CLIENT_QUEUE_MAXSIZE = 64
 
 
 @dataclass(slots=True)
@@ -33,6 +34,8 @@ class RealtimeHub:
     session: RealtimeSession = field(default_factory=RealtimeSession)
     device_adapter: DeviceAdapter | None = field(default=None)
     _clients: set[WebSocket] = field(default_factory=set, init=False)
+    _client_queues: dict[WebSocket, asyncio.Queue[dict]] = field(default_factory=dict, init=False)
+    _client_sender_tasks: dict[WebSocket, asyncio.Task] = field(default_factory=dict, init=False)
     _source_task: asyncio.Task | None = field(default=None, init=False)
     _source_monitor_task: asyncio.Task | None = field(default=None, init=False)
     _tcp_receiver: TCPReceiver | None = field(default=None, init=False)
@@ -60,17 +63,28 @@ class RealtimeHub:
         }
     async def stop(self) -> None:
         await self.stop_acquisition()
+        for client in tuple(self._clients):
+            self.disconnect(client)
         if self.device_adapter is not None:
             self.device_adapter.close()
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self._clients.add(websocket)
+        queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=CLIENT_QUEUE_MAXSIZE)
+        self._client_queues[websocket] = queue
+        self._client_sender_tasks[websocket] = asyncio.create_task(
+            self._run_client_sender(websocket, queue)
+        )
         self._status["client_count"] = len(self._clients)
-        await websocket.send_json(self._runtime_state_envelope())
+        queue.put_nowait(self._runtime_state_envelope())
 
     def disconnect(self, websocket: WebSocket) -> None:
         self._clients.discard(websocket)
+        self._client_queues.pop(websocket, None)
+        sender_task = self._client_sender_tasks.pop(websocket, None)
+        if sender_task is not None and sender_task is not asyncio.current_task():
+            sender_task.cancel()
         self._status["client_count"] = len(self._clients)
 
     def status_snapshot(self) -> dict[str, object]:
@@ -84,7 +98,7 @@ class RealtimeHub:
         command = str(message.get("command", "")).strip().lower()
         async with self._control_lock:
             if command == "get_status":
-                await websocket.send_json(self._runtime_state_envelope())
+                self._send_to_client(websocket, self._runtime_state_envelope())
                 await self._send_command_ack(websocket, command, True, "Runtime state sent.")
                 return
 
@@ -230,16 +244,42 @@ class RealtimeHub:
             await self._broadcast(topomap_message.model_dump())
 
     async def _broadcast(self, message: dict) -> None:
-        stale: list[WebSocket] = []
-        for client in self._clients:
-            try:
-                await client.send_json(message)
-            except Exception:
-                stale.append(client)
-
-        for client in stale:
-            self._clients.discard(client)
+        for client in tuple(self._clients):
+            self._send_to_client(client, message)
         self._status["client_count"] = len(self._clients)
+
+    def _send_to_client(self, websocket: WebSocket, message: dict) -> None:
+        queue = self._client_queues.get(websocket)
+        if queue is None:
+            return
+        try:
+            queue.put_nowait(message)
+        except asyncio.QueueFull:
+            logger.warning(
+                "Disconnecting slow realtime client after its %d-message queue filled",
+                CLIENT_QUEUE_MAXSIZE,
+            )
+            self.disconnect(websocket)
+
+    async def _run_client_sender(
+        self,
+        websocket: WebSocket,
+        queue: asyncio.Queue[dict],
+    ) -> None:
+        try:
+            while True:
+                message = await queue.get()
+                await websocket.send_json(message)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.debug("Realtime websocket sender stopped", exc_info=True)
+        finally:
+            self._clients.discard(websocket)
+            self._client_queues.pop(websocket, None)
+            if self._client_sender_tasks.get(websocket) is asyncio.current_task():
+                self._client_sender_tasks.pop(websocket, None)
+            self._status["client_count"] = len(self._clients)
 
     async def _send_command_ack(
         self,
@@ -248,7 +288,8 @@ class RealtimeHub:
         accepted: bool,
         message: str,
     ) -> None:
-        await websocket.send_json(
+        self._send_to_client(
+            websocket,
             Envelope(
                 type="command_ack",
                 timestamp_ms=self._now_ms(),
@@ -257,7 +298,7 @@ class RealtimeHub:
                     "accepted": accepted,
                     "message": message,
                 },
-            ).model_dump()
+            ).model_dump(),
         )
 
     async def _broadcast_runtime_state(self) -> None:

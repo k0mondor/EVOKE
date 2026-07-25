@@ -21,8 +21,6 @@ interface InterpolationPoint {
   value: number
 }
 
-type Triangle = [number, number, number]
-
 const getTopomapGeometry = (width: number, height: number) => {
   const radius = Math.min(width * 0.4, height * 0.36)
   return {
@@ -32,114 +30,17 @@ const getTopomapGeometry = (width: number, height: number) => {
   }
 }
 
-const circumcircleContains = (
-  point: InterpolationPoint,
-  first: InterpolationPoint,
-  second: InterpolationPoint,
-  third: InterpolationPoint,
-) => {
-  const denominator =
-    2 *
-    (first.x * (second.y - third.y) +
-      second.x * (third.y - first.y) +
-      third.x * (first.y - second.y))
-  if (Math.abs(denominator) < 1e-9) {
-    return false
+const interpolateSmooth = (x: number, y: number, points: InterpolationPoint[]) => {
+  let value = 0
+
+  // Overlapping Gaussian radial fields form rounded activity regions without
+  // exposing the straight edges of an underlying triangle mesh.
+  for (const point of points) {
+    const distanceSquared = (x - point.x) ** 2 + (y - point.y) ** 2
+    value += point.value * Math.exp(-distanceSquared / 0.16)
   }
 
-  const firstNorm = first.x ** 2 + first.y ** 2
-  const secondNorm = second.x ** 2 + second.y ** 2
-  const thirdNorm = third.x ** 2 + third.y ** 2
-  const centerX =
-    (firstNorm * (second.y - third.y) +
-      secondNorm * (third.y - first.y) +
-      thirdNorm * (first.y - second.y)) /
-    denominator
-  const centerY =
-    (firstNorm * (third.x - second.x) +
-      secondNorm * (first.x - third.x) +
-      thirdNorm * (second.x - first.x)) /
-    denominator
-  const radiusSquared = (centerX - first.x) ** 2 + (centerY - first.y) ** 2
-  const pointDistanceSquared = (centerX - point.x) ** 2 + (centerY - point.y) ** 2
-  return pointDistanceSquared <= radiusSquared + 1e-7
-}
-
-const buildDelaunayTriangles = (input: InterpolationPoint[]) => {
-  const points = [
-    ...input,
-    { x: -4, y: -3, value: 0 },
-    { x: 4, y: -3, value: 0 },
-    { x: 0, y: 4, value: 0 },
-  ]
-  const superStart = input.length
-  let triangles: Triangle[] = [[superStart, superStart + 1, superStart + 2]]
-
-  for (let pointIndex = 0; pointIndex < input.length; pointIndex += 1) {
-    const badTriangles = triangles.filter(([first, second, third]) =>
-      circumcircleContains(points[pointIndex], points[first], points[second], points[third]),
-    )
-    const edgeCounts = new Map<string, { edge: [number, number]; count: number }>()
-
-    for (const [first, second, third] of badTriangles) {
-      for (const edge of [
-        [first, second],
-        [second, third],
-        [third, first],
-      ] as Array<[number, number]>) {
-        const key = edge[0] < edge[1] ? `${edge[0]}:${edge[1]}` : `${edge[1]}:${edge[0]}`
-        const existing = edgeCounts.get(key)
-        if (existing) {
-          existing.count += 1
-        } else {
-          edgeCounts.set(key, { edge, count: 1 })
-        }
-      }
-    }
-
-    const badSet = new Set(badTriangles)
-    triangles = triangles.filter((triangle) => !badSet.has(triangle))
-    for (const { edge, count } of edgeCounts.values()) {
-      if (count === 1) {
-        triangles.push([edge[0], edge[1], pointIndex])
-      }
-    }
-  }
-
-  return {
-    points,
-    triangles: triangles.filter((triangle) => triangle.every((index) => index < superStart)),
-  }
-}
-
-const interpolateLinear = (
-  x: number,
-  y: number,
-  points: InterpolationPoint[],
-  triangles: Triangle[],
-) => {
-  for (const [firstIndex, secondIndex, thirdIndex] of triangles) {
-    const first = points[firstIndex]
-    const second = points[secondIndex]
-    const third = points[thirdIndex]
-    const denominator =
-      (second.y - third.y) * (first.x - third.x) +
-      (third.x - second.x) * (first.y - third.y)
-    if (Math.abs(denominator) < 1e-9) {
-      continue
-    }
-
-    const firstWeight =
-      ((second.y - third.y) * (x - third.x) + (third.x - second.x) * (y - third.y)) / denominator
-    const secondWeight =
-      ((third.y - first.y) * (x - third.x) + (first.x - third.x) * (y - third.y)) / denominator
-    const thirdWeight = 1 - firstWeight - secondWeight
-    if (firstWeight >= -1e-5 && secondWeight >= -1e-5 && thirdWeight >= -1e-5) {
-      return first.value * firstWeight + second.value * secondWeight + third.value * thirdWeight
-    }
-  }
-
-  return 0
+  return value
 }
 
 const drawTopomap = (
@@ -185,7 +86,6 @@ const drawTopomap = (
       }
     }),
   ]
-  const interpolation = buildDelaunayTriangles(interpolationInput)
   const offscreen = document.createElement('canvas')
   offscreen.width = resolution
   offscreen.height = resolution
@@ -206,9 +106,23 @@ const drawTopomap = (
         continue
       }
 
-      const value = interpolateLinear(x, y, interpolation.points, interpolation.triangles)
+      const value = interpolateSmooth(x, y, interpolationInput)
       field[index] = value
-      const [red, green, blue] = colorChannelsForValue(value)
+    }
+  }
+
+  const fieldScale = Math.max(1e-6, ...field.map((value) => Math.abs(value)))
+  for (let yIndex = 0; yIndex < resolution; yIndex += 1) {
+    for (let xIndex = 0; xIndex < resolution; xIndex += 1) {
+      const x = (xIndex / (resolution - 1)) * 2 - 1
+      const y = 1 - (yIndex / (resolution - 1)) * 2
+      const index = yIndex * resolution + xIndex
+      if (x * x + y * y > 1) {
+        continue
+      }
+
+      field[index] /= fieldScale
+      const [red, green, blue] = colorChannelsForValue(field[index])
       image.data[index * 4] = red
       image.data[index * 4 + 1] = green
       image.data[index * 4 + 2] = blue
@@ -272,9 +186,11 @@ const drawContours = (
   centerY: number,
   radius: number,
 ) => {
-  const thresholds = [-0.66, -0.33, 0, 0.33, 0.66]
+  const thresholds = [-0.66, -0.33, 0.33, 0.66]
   context.strokeStyle = 'rgba(255,255,255,0.24)'
   context.lineWidth = 0.75
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
 
   const project = (x: number, y: number) => ({
     x: centerX - radius + (x / (resolution - 1)) * radius * 2,

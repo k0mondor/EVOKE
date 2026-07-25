@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
 
 const NAV_ITEMS = [
-  { label: 'vision', href: '#landing' },
-  { label: 'modes', href: '#room-focus' },
-  { label: 'signals', href: '#mission' },
+  { label: 'VISION', href: '#landing' },
+  { label: 'MODES', href: '#room-focus' },
+  { label: 'SIGNALS', href: '#mission' },
 ] as const
 
 export const HeroSection = () => {
@@ -188,6 +188,27 @@ export const HeroSection = () => {
               </a>
             ))}
           </div>
+
+          <div className="hero-qr-trigger">
+            <button
+              type="button"
+              className="hero-qr-card"
+              aria-label="Show the EVOKE community QR code"
+            >
+              <span className="hero-qr-card__compact" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation">
+                  <path d="M4 4h6v6H4V4Zm2 2v2h2V6H6Zm8-2h6v6h-6V4Zm2 2v2h2V6h-2ZM4 14h6v6H4v-6Zm2 2v2h2v-2H6Zm8-2h2v2h-2v-2Zm4 0h2v4h-2v-4Zm-4 4h4v2h-4v-2Z" />
+                </svg>
+                <span>JOIN</span>
+              </span>
+
+              <span className="hero-qr-card__expanded">
+                <img src="/images/evoke-community-qr.jpg" alt="EVOKE community group QR code" />
+                <strong>SCAN TO JOIN</strong>
+                <small>EVOKE COMMUNITY</small>
+              </span>
+            </button>
+          </div>
         </nav>
       </header>
 
@@ -203,6 +224,19 @@ export const HeroSection = () => {
         <div className="hero-statement hero-statement--response" aria-hidden="true">
           <span>WORLD</span>
           <span>RESPONDS</span>
+        </div>
+
+        <div className="hero-event-meta" aria-label="AdventureX 2026">
+          <span className="hero-event-meta__label">AdventureX</span>
+          <span className="hero-event-meta__year">2026</span>
+        </div>
+
+        <div className="hero-signal-meta" aria-label="8 channels at 250 hertz">
+          <span className="hero-signal-meta__number">8</span>
+          <span className="hero-signal-meta__unit">CHANNELS</span>
+          <span className="hero-signal-meta__divider">/</span>
+          <span className="hero-signal-meta__number">250</span>
+          <span className="hero-signal-meta__unit">HZ</span>
         </div>
       </div>
     </section>

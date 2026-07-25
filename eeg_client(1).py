@@ -19,9 +19,10 @@ import struct
 import time
 
 # ==================== 配置 ====================
-TCP_IP = "192.168.1.100"   # 改成上位机电脑的局域网 IP
+TCP_IP = "30.201.220.2"     # 上位机电脑的局域网 IP
 TCP_PORT = 12345
 SAVE_TO_CSV = False         # 是否保存原始数据到 CSV
+DATA_TIMEOUT_SECONDS = 5.0  # 已连接但多久收不到数据时给出明确提示
 # ===============================================
 
 # 协议常量
@@ -36,19 +37,25 @@ def connect():
     sock.settimeout(10.0)
     print(f"[EEG] 正在连接 {TCP_IP}:{TCP_PORT} ...")
     sock.connect((TCP_IP, TCP_PORT))
-    sock.settimeout(None)
-    print("[EEG] 连接成功! 等待数据...")
+    sock.settimeout(DATA_TIMEOUT_SECONDS)
+    print(f"[EEG] 连接成功! 等待数据（{DATA_TIMEOUT_SECONDS:.0f} 秒无数据将提示）...")
     return sock
 
 
 def recv_exact(sock, n):
-    buf = b""
+    buf = bytearray()
     while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
+        try:
+            chunk = sock.recv(n - len(buf))
+        except socket.timeout as error:
+            raise TimeoutError(
+                f"已连接上位机，但 {DATA_TIMEOUT_SECONDS:.0f} 秒内没有收到完整帧"
+                f"（当前 {len(buf)}/{n} 字节）。请在上位机软件中确认设备已连接并点击开始采集/发送。"
+            ) from error
         if not chunk:
             raise ConnectionError("连接断开")
-        buf += chunk
-    return buf
+        buf.extend(chunk)
+    return bytes(buf)
 
 
 def parse_frame(data):
@@ -120,6 +127,8 @@ def main():
         print("\n[EEG] 用户中断")
     except ConnectionError as e:
         print(f"[EEG] 连接错误: {e}")
+    except TimeoutError as e:
+        print(f"[EEG] 数据超时: {e}")
     except Exception as e:
         print(f"[EEG] 异常: {e}")
     finally:

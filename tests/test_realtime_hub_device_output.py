@@ -125,3 +125,36 @@ def test_auto_inference_skips_collection_windows_and_uses_following_windows() ->
         assert len(adapter.sent_actions) == 1
 
     asyncio.run(scenario())
+
+
+def test_slow_websocket_client_does_not_block_broadcast() -> None:
+    class SlowWebSocket:
+        def __init__(self) -> None:
+            self.accepted = False
+            self.send_started = asyncio.Event()
+            self.release_send = asyncio.Event()
+
+        async def accept(self) -> None:
+            self.accepted = True
+
+        async def send_json(self, message: dict) -> None:
+            self.send_started.set()
+            await self.release_send.wait()
+
+    async def scenario() -> None:
+        hub = _hub(NoopDeviceAdapter())
+        await hub.start()
+        websocket = SlowWebSocket()
+        await hub.connect(websocket)
+        await websocket.send_started.wait()
+
+        await asyncio.wait_for(
+            hub._broadcast({"type": "eeg_frame", "payload": {}}),
+            timeout=0.05,
+        )
+
+        assert websocket.accepted
+        assert hub._client_queues[websocket].qsize() == 1
+        hub.disconnect(websocket)
+
+    asyncio.run(scenario())
