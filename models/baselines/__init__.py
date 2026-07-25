@@ -1,1 +1,0 @@
-"""Classical motor imagery baselines."""

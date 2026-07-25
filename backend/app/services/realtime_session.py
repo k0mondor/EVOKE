@@ -46,6 +46,9 @@ class RealtimeSession:
     quality_gate: SignalQualityGate = field(default_factory=SignalQualityGate)
     runner: CheckpointTemporalSpatialRunner = field(default_factory=CheckpointTemporalSpatialRunner)
     smoother: ProbabilitySmoother = field(default_factory=ProbabilitySmoother)
+    transition_guard_s: float = 1.0
+    _phase: str | None = field(default=None, init=False)
+    _guard_samples_remaining: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         protocol = self.runner.protocol
@@ -56,15 +59,68 @@ class RealtimeSession:
                 rms_threshold=float(thresholds.get("rms_threshold", self.quality_gate.rms_threshold)),
             )
 
-    def push_frame(self, frame: EEGFrameBatch) -> RealtimeSessionOutput:
+    @property
+    def required_collection_windows(self) -> int:
+        return self.runner.baseline_window_count
+
+    def begin_inference(self) -> None:
+        # Drop the overlapping rest/task samples so the first inference window
+        # is composed entirely of post-cue data.
+        self.buffer.reset()
+        self.runner.begin_inference()
+        self.smoother.reset()
+        self._phase = "inferring"
+        self._guard_samples_remaining = int(
+            round(self.transition_guard_s * self.buffer.sampling_rate)
+        )
+
+    def push_frame(
+        self,
+        frame: EEGFrameBatch,
+        phase: str = "inferring",
+    ) -> RealtimeSessionOutput:
         resampled = self.resampler.resample(frame)
-        windows = self.buffer.append(resampled)
+        if phase in {"collecting", "inferring"} and phase != self._phase:
+            self.buffer.reset()
+            self._phase = phase
+            self._guard_samples_remaining = int(
+                round(self.transition_guard_s * self.buffer.sampling_rate)
+            )
+
+        buffered_frame = resampled
+        if self._guard_samples_remaining > 0:
+            skipped = min(
+                self._guard_samples_remaining,
+                int(resampled.samples.shape[0]),
+            )
+            self._guard_samples_remaining -= skipped
+            buffered_frame = EEGFrameBatch(
+                sampling_rate=resampled.sampling_rate,
+                channel_names=resampled.channel_names,
+                samples=resampled.samples[skipped:],
+                timestamp_ms=resampled.timestamp_ms,
+                frame_index=resampled.frame_index,
+                source=resampled.source,
+            )
+        windows = (
+            self.buffer.append(buffered_frame)
+            if buffered_frame.samples.shape[0] > 0
+            else []
+        )
         events: list[WindowInferenceEvent] = []
 
         for raw_window in windows:
             clean_window = self.preprocessor.transform_window(raw_window)
             quality = self.quality_gate.evaluate(clean_window.data)
-            prediction = self.runner.predict(clean_window)
+            model_window = raw_window if self.runner.requires_raw_window else clean_window
+            if phase == "collecting":
+                prediction = self.runner.calibrate(model_window)
+            elif phase == "inferring":
+                prediction = self.runner.predict(model_window)
+                if prediction is None:
+                    continue
+            else:
+                continue
             smoothed_probabilities = self.smoother.smooth(prediction.probabilities)
             dominant_label = max(smoothed_probabilities, key=smoothed_probabilities.get)
             prediction = RealtimeInferenceResult(

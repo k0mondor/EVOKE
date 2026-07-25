@@ -8,6 +8,9 @@ class ProbabilitySmoother:
     alpha: float = 0.35
     _state: dict[str, float] = field(default_factory=dict)
 
+    def reset(self) -> None:
+        self._state.clear()
+
     def smooth(self, probabilities: dict[str, float]) -> dict[str, float]:
         if not self._state:
             self._state = dict(probabilities)

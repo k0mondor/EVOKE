@@ -34,8 +34,8 @@ const loadSensorPositions = (): SensorPosition[] => {
 export const FinalBenefitsSection = () => {
   const { frame, connectionState, runtimeStatus, commandMessage, sendCommand } = useBrainSignal()
   const [sensorPositions, setSensorPositions] = useState<SensorPosition[]>(loadSensorPositions)
-  const [collectionWindowCount, setCollectionWindowCount] = useState(5)
-  const [inferenceWindowCount, setInferenceWindowCount] = useState(5)
+  const [collectionWindowCount, setCollectionWindowCount] = useState(3)
+  const [inferenceWindowCount, setInferenceWindowCount] = useState(1)
   const confidenceScores = [
     { label: 'Mode 1', value: frame.probabilities.mode1, tone: 'confidence-bar__fill--orange' },
     { label: 'Mode 2', value: frame.probabilities.mode2, tone: 'confidence-bar__fill--blue' },
@@ -206,13 +206,13 @@ export const FinalBenefitsSection = () => {
                         <span>Collect windows</span>
                         <input
                           type="number"
-                          min="1"
+                          min="3"
                           max="50"
                           step="1"
                           disabled={isAcquiring}
                           value={collectionWindowCount}
                           onChange={(event) =>
-                            setCollectionWindowCount(Math.max(1, Math.min(50, Number(event.target.value) || 1)))
+                            setCollectionWindowCount(Math.max(3, Math.min(50, Number(event.target.value) || 3)))
                           }
                         />
                       </label>

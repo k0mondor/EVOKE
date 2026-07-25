@@ -43,9 +43,9 @@ class RealtimeHub:
     _status: dict[str, object] = field(default_factory=dict, init=False)
     _acquisition_state: str = field(default="idle", init=False)
     _inference_state: str = field(default="idle", init=False)
-    _collection_windows_target: int = field(default=5, init=False)
+    _collection_windows_target: int = field(default=3, init=False)
     _collection_windows_seen: int = field(default=0, init=False)
-    _inference_windows_target: int = field(default=5, init=False)
+    _inference_windows_target: int = field(default=1, init=False)
     _inference_probabilities: list[dict[str, float]] = field(default_factory=list, init=False)
     _inference_final_result: dict[str, object] | None = field(default=None, init=False)
     _source_error: str | None = field(default=None, init=False)
@@ -105,10 +105,10 @@ class RealtimeHub:
             if command == "start_acquisition":
                 try:
                     collection_window_count = max(
-                        1, min(50, int(message.get("collection_window_count", 5)))
+                        1, min(50, int(message.get("collection_window_count", 3)))
                     )
                     inference_window_count = max(
-                        1, min(50, int(message.get("inference_window_count", 5)))
+                        1, min(50, int(message.get("inference_window_count", 1)))
                     )
                 except (TypeError, ValueError):
                     await self._send_command_ack(
@@ -141,13 +141,17 @@ class RealtimeHub:
     async def start_acquisition(
         self,
         *,
-        collection_window_count: int = 5,
-        inference_window_count: int = 5,
+        collection_window_count: int = 3,
+        inference_window_count: int = 1,
     ) -> bool:
         if self._source_task is not None and not self._source_task.done():
             return False
 
         self.session = RealtimeSession()
+        collection_window_count = max(
+            self.session.required_collection_windows,
+            collection_window_count,
+        )
         self._source_error = None
         self._reset_inference_state(
             collection_window_count=collection_window_count,
@@ -184,7 +188,10 @@ class RealtimeHub:
         await self._broadcast_runtime_state()
 
     async def ingest_frame(self, frame) -> None:
-        output = self.session.push_frame(frame)
+        output = self.session.push_frame(
+            frame,
+            phase=self._inference_state,
+        )
         self._status["last_frame_timestamp_ms"] = output.eeg_frame.timestamp_ms
         if output.events:
             event = output.events[-1]
@@ -360,6 +367,14 @@ class RealtimeHub:
                 self._collection_windows_seen += 1
                 if self._collection_windows_seen >= self._collection_windows_target:
                     self._inference_state = "inferring"
+                    begin_inference = getattr(
+                        self.session,
+                        "begin_inference",
+                        None,
+                    )
+                    if callable(begin_inference):
+                        begin_inference()
+                    break
                 continue
 
             if self._inference_state != "inferring":
@@ -443,8 +458,8 @@ class RealtimeHub:
     def _reset_inference_state(
         self,
         *,
-        collection_window_count: int = 5,
-        inference_window_count: int = 5,
+        collection_window_count: int = 3,
+        inference_window_count: int = 1,
     ) -> None:
         self._inference_state = "collecting"
         self._collection_windows_target = max(1, min(50, collection_window_count))

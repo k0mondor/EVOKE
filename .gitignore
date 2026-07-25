@@ -26,6 +26,8 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+.venv-gpu/
+.gpu-wheel-cache/
 venv/
 env/
 
@@ -51,28 +53,25 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
-# Local packaged assets and root EEG captures
+# Local packaged assets and EEG captures
 *.zip
 ads1299_*.csv
-
-# Data outputs
-data/interim/*
-!data/interim/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-data/raw/*
-!data/raw/.gitkeep
-
-# Archived experiments kept locally only
+*.edf
+*.bdf
+*.set
+*.fif
+data/
 archive/
-
-# Local experiment artifacts not for remote
 reports/
-checkpoints/
-scripts/train_best_long_t_plain_cnn.py
-scripts/compare_long_t_batches.py
-scripts/eval_cnn_long_t_overlap_custom.py
-scripts/train_best_long_t_21xx6_warm_new4_plain_cnn.py
-scripts/train_best_long_t_new4_plain_cnn.py
-scripts/visualize_long_t_batch.py
-tests/test_tcp_receiver_diagnostics.py
+handoff/
+
+# Only the production inference checkpoint belongs in Git.
+checkpoints/*
+!checkpoints/realtime_mi_relative_bandpower_v1.joblib
+
+# Offline training, tuning and evaluation entry points stay local.
+scripts/train_*.py
+scripts/tune_*.py
+scripts/eval_*.py
+scripts/evaluate_*.py
+scripts/export_*checkpoint*.py

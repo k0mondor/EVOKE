@@ -80,6 +80,13 @@ class RollingEEGBuffer:
             for index, channel in enumerate(self._channel_names)
         }
 
+    def reset(self) -> None:
+        channel_count = len(self._channel_names)
+        self._samples = np.empty((0, channel_count), dtype=np.float64)
+        self._base_sample_index = 0
+        self._total_samples = 0
+        self._next_window_end = 0
+
     def _trim(self) -> None:
         excess = self._samples.shape[0] - self.retention_samples
         if excess <= 0:
