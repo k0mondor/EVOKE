@@ -11,7 +11,6 @@ import serial
 from serial.tools import list_ports as serial_list_ports
 
 
-LOGGER = logging.getLogger(__name__)
 T5AI_USB_VID = 0x1A86
 T5AI_USB_PID = 0x55D2
 
@@ -80,9 +79,8 @@ def resolve_serial_port(configured_port: str | None = "auto") -> str:
         return resolved
 
     if not candidates:
-        raise serial.SerialException(
-            "No T5AI CH342 USB serial device was found (expected VID:PID 1A86:55D2)"
-        )
+        LOGGER.warning("No CH342 chip found (VID:PID 1A86:55D2); falling back to serial port scan")
+        return _fallback_auto_detect()
 
     ports = ", ".join(str(port_info.device) for port_info in candidates)
     raise serial.SerialException(
@@ -91,7 +89,6 @@ def resolve_serial_port(configured_port: str | None = "auto") -> str:
     )
 
 
-logger = logging.getLogger(__name__)
 
 
 class DeviceAdapter(Protocol):
@@ -346,6 +343,26 @@ class SerialT5DeviceAdapter:
         self.close()
 
 
+
+
+def _fallback_auto_detect() -> str:
+    """Fallback when CH342 is not found: scan all serial ports."""
+    all_ports = list(serial_list_ports.comports())
+    if len(all_ports) == 0:
+        raise serial.SerialException(
+            "No serial port was found at all. Ensure the T5AI board is connected via USB "
+            "and check Device Manager for the COM port."
+        )
+    if len(all_ports) == 1:
+        resolved = str(all_ports[0].device)
+        LOGGER.info("Fallback auto-detected serial port: %s (%s)", resolved, all_ports[0].description)
+        return resolved
+    lines = ["EEG_DEVICE_SERIAL_PORT=auto could not determine the correct port."]
+    lines.append("Set EEG_DEVICE_SERIAL_PORT explicitly in .env. Available ports:")
+    desc = lambda p: p.description or "(no description)"
+    lines += [f"  {p.device}  -  {desc(p)}" for p in sorted(all_ports, key=lambda x: x.device)]
+    raise serial.SerialException('\n'.join(lines))
+
 def build_device_adapter(settings: Any) -> DeviceAdapter:
     if getattr(settings, "mode", "noop") == "serial":
         return SerialDeviceAdapter(
@@ -365,3 +382,4 @@ def build_device_adapter(settings: Any) -> DeviceAdapter:
             timeout_s=float(getattr(settings, "timeout_s", 2.0)),
         )
     return NoopDeviceAdapter()
+
