@@ -4,6 +4,7 @@ export type BrainSignalSource = 'demo' | 'device'
 export type BrainConnectionState = 'demo' | 'connecting' | 'live'
 export type AcquisitionState = 'idle' | 'connecting' | 'running' | 'stopped'
 export type InferenceState = 'idle' | 'collecting' | 'inferring' | 'complete' | 'cancelled'
+export type StreamState = 'idle' | 'disconnected' | 'waiting_for_bytes' | 'partial_frame' | 'streaming'
 
 export interface InferenceFinalResult {
   label: string
@@ -24,6 +25,14 @@ export interface BrainRuntimeStatus {
   progress: number
   finalResult: InferenceFinalResult | null
   error: string | null
+  streamState: StreamState
+  tcpConnected: boolean
+  tcpBytesReceived: number
+  tcpPendingFrameBytes: number
+  tcpExpectedFrameBytes: number
+  tcpFramesReceived: number
+  tcpLastByteAt: number | null
+  tcpLastFrameAt: number | null
 }
 
 export interface BrainSignalFrame {
@@ -77,6 +86,14 @@ const INITIAL_RUNTIME_STATUS: BrainRuntimeStatus = {
   progress: 0,
   finalResult: null,
   error: null,
+  streamState: 'idle',
+  tcpConnected: false,
+  tcpBytesReceived: 0,
+  tcpPendingFrameBytes: 0,
+  tcpExpectedFrameBytes: 328,
+  tcpFramesReceived: 0,
+  tcpLastByteAt: null,
+  tcpLastFrameAt: null,
 }
 
 const clamp = (value: number, minimum = 0, maximum = 100) =>
@@ -334,6 +351,14 @@ function normalizeRuntimeStatus(value: unknown): BrainRuntimeStatus | null {
     progress: clamp(Number(payload.progress) || 0, 0, 1),
     finalResult,
     error: payload.error ? String(payload.error) : null,
+    streamState: String(payload.stream_state ?? 'idle') as StreamState,
+    tcpConnected: Boolean(payload.tcp_connected),
+    tcpBytesReceived: Math.max(0, Number(payload.tcp_bytes_received) || 0),
+    tcpPendingFrameBytes: Math.max(0, Number(payload.tcp_pending_frame_bytes) || 0),
+    tcpExpectedFrameBytes: Math.max(1, Number(payload.tcp_expected_frame_bytes) || 328),
+    tcpFramesReceived: Math.max(0, Number(payload.tcp_frames_received) || 0),
+    tcpLastByteAt: payload.tcp_last_byte_at_ms ? Number(payload.tcp_last_byte_at_ms) : null,
+    tcpLastFrameAt: payload.tcp_last_frame_at_ms ? Number(payload.tcp_last_frame_at_ms) : null,
   }
 }
 
@@ -403,11 +428,15 @@ export function useBrainSignal() {
         try {
           const data = JSON.parse(String(event.data))
           if (data?.type === 'runtime_state') {
+            const previousInferenceState = runtimeStatusRef.current.inferenceState
             const nextRuntimeStatus = normalizeRuntimeStatus(data.payload)
             if (nextRuntimeStatus) {
               runtimeStatusRef.current = nextRuntimeStatus
               setRuntimeStatus(nextRuntimeStatus)
-              if (nextRuntimeStatus.inferenceState === 'collecting') {
+              if (
+                nextRuntimeStatus.inferenceState === 'collecting' &&
+                previousInferenceState !== 'collecting'
+              ) {
                 setFrame((current) => ({
                   ...current,
                   probabilities: { mode1: 0, mode2: 0, mode3: 0 },
@@ -446,7 +475,10 @@ export function useBrainSignal() {
             }
             lastEegVisualUpdate = now
           }
-          if (data?.type === 'mi_probs' && runtimeStatusRef.current.inferenceState !== 'inferring') {
+          if (
+            data?.type === 'mi_probs' &&
+            !['collecting', 'inferring'].includes(runtimeStatusRef.current.inferenceState)
+          ) {
             return
           }
 

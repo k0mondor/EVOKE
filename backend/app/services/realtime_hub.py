@@ -21,7 +21,7 @@ from backend.app.services.realtime_session import RealtimeSession, RealtimeSessi
 from models.realtime.device_adapter import DeviceAdapter, build_device_adapter
 from models.realtime.mock_source import MockEEGSource
 from models.realtime.signals import signal_code_for_label
-from models.realtime.tcp_receiver import TCPReceiver, TCPReceiverConfig
+from models.realtime.tcp_receiver import EXPECTED_FRAME_SIZE, TCPReceiver, TCPReceiverConfig
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,8 @@ class RealtimeHub:
     device_adapter: DeviceAdapter | None = field(default=None)
     _clients: set[WebSocket] = field(default_factory=set, init=False)
     _source_task: asyncio.Task | None = field(default=None, init=False)
+    _source_monitor_task: asyncio.Task | None = field(default=None, init=False)
+    _tcp_receiver: TCPReceiver | None = field(default=None, init=False)
     _control_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
     _status: dict[str, object] = field(default_factory=dict, init=False)
     _acquisition_state: str = field(default="idle", init=False)
@@ -56,7 +58,6 @@ class RealtimeHub:
             "last_prediction_label": None,
             "last_prediction_confidence": None,
         }
-
     async def stop(self) -> None:
         await self.stop_acquisition()
         if self.device_adapter is not None:
@@ -141,6 +142,7 @@ class RealtimeHub:
         if self.settings.source.mode == "tcp":
             self._acquisition_state = "connecting"
             self._source_task = asyncio.create_task(self._run_tcp_loop())
+            self._source_monitor_task = asyncio.create_task(self._run_source_monitor())
         else:
             self._acquisition_state = "running"
             self._source_task = asyncio.create_task(self._run_demo_loop())
@@ -148,6 +150,13 @@ class RealtimeHub:
         return True
 
     async def stop_acquisition(self) -> None:
+        monitor_task = self._source_monitor_task
+        self._source_monitor_task = None
+        if monitor_task is not None and not monitor_task.done():
+            monitor_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await monitor_task
+
         task = self._source_task
         self._source_task = None
         if task is not None and not task.done():
@@ -269,6 +278,24 @@ class RealtimeHub:
             if self._inference_windows_target > 0
             else 0.0
         )
+        tcp_diagnostics = (
+            self._tcp_receiver.diagnostics_snapshot()
+            if self._tcp_receiver is not None
+            else {
+                "stream_state": "idle",
+                "tcp_connected": False,
+                "tcp_connection_count": 0,
+                "tcp_connected_at_ms": None,
+                "tcp_disconnected_at_ms": None,
+                "tcp_bytes_received": 0,
+                "tcp_pending_frame_bytes": 0,
+                "tcp_expected_frame_bytes": EXPECTED_FRAME_SIZE,
+                "tcp_frames_received": 0,
+                "tcp_last_byte_at_ms": None,
+                "tcp_last_frame_at_ms": None,
+                "tcp_last_header": None,
+            }
+        )
         return {
             "source_mode": self.settings.source.mode,
             "acquisition_state": self._acquisition_state,
@@ -280,6 +307,7 @@ class RealtimeHub:
             "progress": min(1.0, progress),
             "final_result": self._inference_final_result,
             "error": self._source_error,
+            **tcp_diagnostics,
         }
 
     async def _consume_inference_events(self, events: list) -> None:
@@ -394,12 +422,18 @@ class RealtimeHub:
             await self.ingest_frame(source.next_frame())
             await asyncio.sleep(source.samples_per_frame / float(source.sampling_rate))
 
+    async def _run_source_monitor(self) -> None:
+        while True:
+            await self._broadcast_runtime_state()
+            await asyncio.sleep(0.5)
+
     async def _run_tcp_loop(self) -> None:
         config = TCPReceiverConfig(
             host=self.settings.source.tcp_host,
             port=self.settings.source.tcp_port,
         )
         receiver = TCPReceiver(config)
+        self._tcp_receiver = receiver
 
         while True:
             try:

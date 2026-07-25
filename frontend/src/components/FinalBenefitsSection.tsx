@@ -50,10 +50,24 @@ export const FinalBenefitsSection = () => {
         ? 'Connecting'
         : 'Live demo'
       : runtimeStatus.acquisitionState === 'running'
-        ? 'Acquiring'
+        ? runtimeStatus.streamState === 'waiting_for_bytes'
+          ? 'Waiting for data'
+          : runtimeStatus.streamState === 'partial_frame'
+            ? 'Partial frame'
+            : runtimeStatus.streamState === 'streaming'
+              ? 'Acquiring'
+              : 'Source connected'
         : runtimeStatus.acquisitionState === 'connecting'
           ? 'Source link'
           : 'Backend ready'
+  const streamDetail =
+    runtimeStatus.streamState === 'partial_frame'
+      ? `${runtimeStatus.tcpPendingFrameBytes} / ${runtimeStatus.tcpExpectedFrameBytes} B`
+      : runtimeStatus.streamState === 'streaming'
+        ? `${runtimeStatus.tcpFramesReceived} frames · ${runtimeStatus.tcpBytesReceived} B`
+        : runtimeStatus.streamState === 'waiting_for_bytes'
+          ? `${runtimeStatus.tcpBytesReceived} B received`
+          : commandMessage
   const finalModeLabels: Record<string, string> = {
     left: 'Mode 1',
     right: 'Mode 2',
@@ -251,7 +265,7 @@ export const FinalBenefitsSection = () => {
                     <span>Signal {Math.round(frame.signalQuality)}%</span>
                     <span>Active {highestMode.label}</span>
                     <span className={runtimeStatus.error ? 'has-error' : ''}>
-                      {runtimeStatus.error ?? commandMessage}
+                      {runtimeStatus.error ?? streamDetail}
                     </span>
                   </div>
                 </div>

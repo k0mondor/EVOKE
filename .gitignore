@@ -11,6 +11,9 @@ Thumbs.db
 .trae/
 .tmp_online_BCI/
 .tmp_zip_preview/
+.dbg/
+debug-tcp-frame-missing.md
+frontend_backup_2026-07-25_pre_zip_merge/
 
 # Python
 __pycache__/
@@ -67,3 +70,9 @@ archive/
 reports/
 checkpoints/
 scripts/train_best_long_t_plain_cnn.py
+scripts/compare_long_t_batches.py
+scripts/eval_cnn_long_t_overlap_custom.py
+scripts/train_best_long_t_21xx6_warm_new4_plain_cnn.py
+scripts/train_best_long_t_new4_plain_cnn.py
+scripts/visualize_long_t_batch.py
+tests/test_tcp_receiver_diagnostics.py
