@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 
 from models.preprocessing.filters import FilterConfig
 from models.realtime.buffer import RollingEEGBuffer
-from models.realtime.controller import DeviceActionController, DeviceControlDecision
 from models.realtime.inference import CheckpointTemporalSpatialRunner, RealtimeInferenceResult
 from models.realtime.online_preprocessor import OnlinePreprocessor
 from models.realtime.postprocess import ProbabilitySmoother
@@ -19,7 +18,6 @@ class WindowInferenceEvent:
     window: EEGWindow
     quality: SignalQuality
     prediction: RealtimeInferenceResult
-    device_action: DeviceControlDecision
     topomaps: list[TopomapSnapshot]
 
 
@@ -48,7 +46,6 @@ class RealtimeSession:
     quality_gate: SignalQualityGate = field(default_factory=SignalQualityGate)
     runner: CheckpointTemporalSpatialRunner = field(default_factory=CheckpointTemporalSpatialRunner)
     smoother: ProbabilitySmoother = field(default_factory=ProbabilitySmoother)
-    controller: DeviceActionController = field(default_factory=DeviceActionController)
 
     def __post_init__(self) -> None:
         protocol = self.runner.protocol
@@ -76,18 +73,11 @@ class RealtimeSession:
                 confidence=smoothed_probabilities[dominant_label],
                 model_name=prediction.model_name,
             )
-            device_action = self.controller.decide(
-                mi_label=prediction.label,
-                confidence=prediction.confidence,
-                usable=quality.usable,
-                timestamp_ms=clean_window.timestamp_ms,
-            )
             events.append(
                 WindowInferenceEvent(
                     window=clean_window,
                     quality=quality,
                     prediction=prediction,
-                    device_action=device_action,
                     topomaps=build_topomap_snapshots(clean_window),
                 )
             )

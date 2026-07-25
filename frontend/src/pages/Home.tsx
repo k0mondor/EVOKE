@@ -1,22 +1,30 @@
-import { ApplicationPlaceholderSection } from '@/components/ApplicationPlaceholderSection'
-import { DashboardSection } from '@/components/DashboardSection'
-import { HeroSection } from '@/components/HeroSection'
-import { RoomFocusSection } from '@/components/RoomFocusSection'
-import { useRealtimeStream } from '@/hooks/useRealtimeStream'
+import { useRef } from 'react'
 
-const SECTION_IDS = ['landing', 'room-focus', 'applications', 'dashboard']
+import { FinalBenefitsSection } from '@/components/FinalBenefitsSection'
+import { HeroSection } from '@/components/HeroSection'
+import { RoomFocusSection, type RoomFocusSectionHandle } from '@/components/RoomFocusSection'
+import { useSectionSnapScroll } from '@/hooks/useSectionSnapScroll'
 
 export default function Home() {
-  useRealtimeStream()
+  const roomFocusRef = useRef<RoomFocusSectionHandle | null>(null)
+
+  useSectionSnapScroll({
+    sectionSelector: '[data-scroll-section]',
+    onBeforeSnap: ({ currentSection, direction }) => {
+      if (direction > 0 && currentSection.id === 'room-focus' && roomFocusRef.current?.isFocused()) {
+        roomFocusRef.current.exitFocusMode()
+        return true
+      }
+
+      return false
+    },
+  })
 
   return (
-    <main className="relative z-10 min-h-[300vh] bg-black text-white">
-      <HeroSection sectionIds={SECTION_IDS} />
-      <div className="relative">
-        <RoomFocusSection />
-        <ApplicationPlaceholderSection />
-        <DashboardSection />
-      </div>
+    <main className="page-shell relative z-10 min-h-screen bg-black text-white">
+      <HeroSection />
+      <RoomFocusSection ref={roomFocusRef} />
+      <FinalBenefitsSection />
     </main>
   )
 }

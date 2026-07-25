@@ -11,7 +11,8 @@ async def realtime_socket(websocket: WebSocket) -> None:
     await hub.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()
+            message = await websocket.receive_json()
+            await hub.handle_command(websocket, message)
     except WebSocketDisconnect:
         hub.disconnect(websocket)
     except Exception:

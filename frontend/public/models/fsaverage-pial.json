@@ -1,0 +1,27 @@
+{
+  "source": "MNE fsaverage pial surfaces",
+  "coordinateSystem": "Three.js Y-up",
+  "normalization": {
+    "rasToWeb": [
+      "x",
+      "z",
+      "-y"
+    ],
+    "centerWebBeforeScale": [
+      0.6187705993652344,
+      15.566457748413086,
+      17.742977142333984
+    ],
+    "scale": 0.013779897263866891
+  },
+  "meshes": {
+    "lh": {
+      "vertices": 163842,
+      "faces": 327680
+    },
+    "rh": {
+      "vertices": 163842,
+      "faces": 327680
+    }
+  }
+}

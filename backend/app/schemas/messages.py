@@ -41,5 +41,6 @@ class SignalQualityPayload(BaseModel):
 
 class TopomapSnapshotPayload(BaseModel):
     id: Literal["instant", "temporal_mean"]
+    channel_names: list[str] = Field(default_factory=list)
     values: list[float] = Field(default_factory=list)
     timestamp: str

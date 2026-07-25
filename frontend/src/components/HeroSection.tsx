@@ -1,33 +1,12 @@
 import { useEffect, useRef } from 'react'
 
-import { FloatingNav } from '@/components/FloatingNav'
+const NAV_ITEMS = [
+  { label: 'vision', href: '#landing' },
+  { label: 'modes', href: '#room-focus' },
+  { label: 'signals', href: '#mission' },
+] as const
 
-interface HeroSectionProps {
-  sectionIds: string[]
-}
-
-interface HeroMetricProps {
-  value: string
-  label: string
-  className: string
-  lineClassName?: string
-}
-
-const HeroMetric = ({ value, label, className, lineClassName = '' }: HeroMetricProps) => {
-  return (
-    <div className={`absolute z-20 ${className}`}>
-      <div className="flex items-center gap-4">
-        <div>
-          <p className="text-2xl tracking-[-0.05em] text-white sm:text-4xl md:text-5xl">{value}</p>
-          <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-white/55 sm:text-xs">{label}</p>
-        </div>
-        <span className={`hidden h-px w-20 bg-white/30 md:block ${lineClassName}`} />
-      </div>
-    </div>
-  )
-}
-
-export const HeroSection = ({ sectionIds }: HeroSectionProps) => {
+export const HeroSection = () => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const speedRef = useRef(1.0)
@@ -167,7 +146,11 @@ export const HeroSection = ({ sectionIds }: HeroSectionProps) => {
   }, [])
 
   return (
-    <section id="landing" className="relative z-20 h-[100svh] min-h-[720px] overflow-hidden bg-black text-white">
+    <section
+      id="landing"
+      data-scroll-section
+      className="hero-section relative z-20 h-[100svh] min-h-[720px] overflow-hidden bg-black text-white"
+    >
       <div
         ref={containerRef}
         className="absolute inset-0 cursor-grab active:cursor-grabbing touch-none select-none will-change-transform"
@@ -188,59 +171,38 @@ export const HeroSection = ({ sectionIds }: HeroSectionProps) => {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,0,0,0.02),rgba(0,0,0,0.42)_72%,rgba(0,0,0,0.72)_100%)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-56 bg-gradient-to-b from-transparent via-black/24 to-black" />
 
-      <FloatingNav sectionIds={sectionIds} />
+      <header className="absolute inset-x-0 top-0 z-30 px-4 pt-5 sm:px-6 md:px-10 md:pt-7">
+        <nav className="relative mx-auto flex max-w-[1840px] items-center gap-4" aria-label="Primary">
+          <a href="#landing" className="evoke-logo px-1 py-2" aria-label="EVOKE home">
+            EVOKE
+          </a>
 
-      <div className="pointer-events-none relative mx-auto h-full w-full max-w-[1400px] px-4 pb-8 pt-20 sm:px-6 md:px-10">
-        <div className="px-1 py-2 text-xs uppercase tracking-[0.32em] text-white/88 sm:px-0">
-          EEG Nexus
-        </div>
-
-        <div className="hidden md:block">
-          <h1 className="hero-title absolute left-[5%] top-[17%] z-10 text-[13vw] font-extrabold uppercase leading-none">
-            decode
-          </h1>
-          <p className="absolute left-[7%] top-[47%] z-20 max-w-[330px] text-sm leading-7 text-white/78">
-            Real-time EEG interface for motor imagery decoding, scene switching, and live monitoring.
-          </p>
-          <h1 className="hero-title absolute right-[4%] top-[37%] z-10 text-[13vw] font-extrabold uppercase leading-none">
-            brain
-          </h1>
-          <h1 className="hero-title absolute left-[31%] top-[57%] z-10 text-[13vw] font-extrabold uppercase leading-none">
-            intent
-          </h1>
-
-          <HeroMetric value="3-class" label="Left / Right / Feet" className="bottom-[8%] left-[7%]" lineClassName="-rotate-[20deg]" />
-          <HeroMetric value="8ch" label="Motor imagery EEG" className="right-[7%] top-[22%]" lineClassName="order-first rotate-[20deg]" />
-          <HeroMetric value="250Hz" label="Streaming window" className="bottom-[8%] right-[7%]" lineClassName="order-first -rotate-[20deg]" />
-        </div>
-
-        <div className="flex h-full flex-col justify-end pb-12 pt-10 md:hidden">
-          <div className="max-w-[320px]">
-            <p className="text-[11px] uppercase tracking-[0.34em] text-white/52">motor imagery interface</p>
-            <h1 className="hero-title mt-5 text-[2.5rem] font-extrabold uppercase leading-[0.84] sm:text-[2.85rem]">
-              Decode
-              <br />
-              Brain
-              <br />
-              Intent
-            </h1>
-            <p className="mt-5 text-sm leading-7 text-white/72">
-              Real-time EEG interface for motor imagery decoding, scene switching, and live monitoring.
-            </p>
-          </div>
-
-          <div className="mt-10 grid grid-cols-3 gap-3 text-left">
-            {[
-              ['3-class', 'Left / Right / Feet'],
-              ['8ch', 'Motor imagery EEG'],
-              ['250Hz', 'Streaming window'],
-            ].map(([value, label]) => (
-              <div key={value} className="rounded-[24px] border border-white/10 bg-black/28 px-4 py-4 backdrop-blur-sm">
-                <p className="text-xl tracking-[-0.04em] text-white">{value}</p>
-                <p className="mt-2 text-[10px] uppercase tracking-[0.24em] text-white/55">{label}</p>
-              </div>
+          <div className="hero-nav-pill absolute left-1/2 hidden -translate-x-1/2 items-center rounded-full px-2 py-1.5 md:flex">
+            {NAV_ITEMS.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                className="rounded-full px-5 py-2 text-sm text-white/68 transition hover:bg-white/[0.06] hover:text-white"
+              >
+                {item.label}
+              </a>
             ))}
           </div>
+        </nav>
+      </header>
+
+      <div className="pointer-events-none relative mx-auto h-full w-full max-w-[1640px] px-4 sm:px-6 md:px-10">
+        <h1 className="sr-only">One thought. World responds.</h1>
+
+        <div className="hero-statement hero-statement--thought" aria-hidden="true">
+          <span>ONE</span>
+          <span>THOUGHT</span>
+          <p>Thought-Activated Spatial System.</p>
+        </div>
+
+        <div className="hero-statement hero-statement--response" aria-hidden="true">
+          <span>WORLD</span>
+          <span>RESPONDS</span>
         </div>
       </div>
     </section>
