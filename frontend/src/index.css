@@ -1465,6 +1465,19 @@ a {
 }
 
 @media (max-width: 640px) {
+  .hero-nav-pill {
+    top: 3.35rem;
+    width: max-content;
+    max-width: calc(100vw - 1.5rem);
+    padding: 0.28rem;
+  }
+
+  .hero-nav-pill a {
+    padding: 0.48rem 0.72rem;
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+  }
+
   .hero-statement > span {
     font-size: clamp(3.25rem, 16vw, 4.5rem);
     line-height: 0.92;
@@ -1484,7 +1497,7 @@ a {
 
   .hero-statement--response {
     right: 1.2rem;
-    bottom: 8%;
+    bottom: 14%;
   }
 
   .hero-event-meta {
@@ -1503,7 +1516,7 @@ a {
 
   .hero-signal-meta {
     left: 1.2rem;
-    bottom: 7%;
+    bottom: 3%;
     gap: 0.3rem;
   }
 

@@ -2,6 +2,9 @@ import { useEffect, useRef } from 'react'
 
 import { publicAssetUrl } from '@/lib/assets'
 
+const HERO_VIDEO_URL = publicAssetUrl('videos/guardnet-hero-brain.mp4')
+const HERO_POSTER_URL = publicAssetUrl('images/guardnet-hero-poster.jpg')
+
 const NAV_ITEMS = [
   { label: 'VISION', href: '#landing' },
   { label: 'MODES', href: '#room-focus' },
@@ -155,13 +158,21 @@ export const HeroSection = () => {
     >
       <div
         ref={containerRef}
-        className="absolute inset-0 cursor-grab active:cursor-grabbing touch-none select-none will-change-transform"
-        style={{ WebkitUserSelect: 'none', transformOrigin: 'center center' }}
+        className="absolute inset-0 cursor-grab touch-pan-y select-none will-change-transform active:cursor-grabbing"
+        style={{
+          WebkitUserSelect: 'none',
+          transformOrigin: 'center center',
+          backgroundImage: `url(${HERO_POSTER_URL})`,
+          backgroundPosition: 'center',
+          backgroundSize: 'cover',
+        }}
       >
         <video
           ref={videoRef}
           className="pointer-events-none h-full w-full object-cover [user-drag:none] [-webkit-user-drag:none]"
-          src={publicAssetUrl('videos/guardnet-hero-brain.mp4')}
+          src={HERO_VIDEO_URL}
+          poster={HERO_POSTER_URL}
+          autoPlay
           loop
           muted
           playsInline
@@ -179,7 +190,7 @@ export const HeroSection = () => {
             EVOKE
           </a>
 
-          <div className="hero-nav-pill absolute left-1/2 hidden -translate-x-1/2 items-center rounded-full px-2 py-1.5 md:flex">
+          <div className="hero-nav-pill absolute left-1/2 flex -translate-x-1/2 items-center rounded-full px-2 py-1.5">
             {NAV_ITEMS.map((item) => (
               <a
                 key={item.label}
@@ -246,7 +257,7 @@ export const HeroSection = () => {
 }
 
 function currentTimeSafePlay(video: HTMLVideoElement) {
-  video.pause()
   video.currentTime = 0
   video.playbackRate = 1
+  void video.play().catch(() => undefined)
 }

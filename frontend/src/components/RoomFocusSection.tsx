@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils'
 
 const MAX_ANGLE = 3.5
 const SECURITY_VIDEO_FPS = 30
+const SECURITY_VIDEO_URL = publicAssetUrl('videos/guardnet-security-custom.mp4')
+const SECURITY_POSTER_URL = publicAssetUrl('images/guardnet-security-poster.jpg')
 
 const SECURITY_MODES = [
   {
@@ -324,11 +326,20 @@ export const RoomFocusSection = forwardRef<RoomFocusSectionHandle>(function Room
               }
             }}
           >
-            <div ref={roomInnerRef} className="room-inner">
+            <div
+              ref={roomInnerRef}
+              className="room-inner"
+              style={{
+                backgroundImage: `url(${SECURITY_POSTER_URL})`,
+                backgroundPosition: 'center',
+                backgroundSize: 'contain',
+              }}
+            >
               <video
                 ref={videoRef}
                 className="room-video security-video"
-                src={publicAssetUrl('videos/guardnet-security-custom.mp4')}
+                src={SECURITY_VIDEO_URL}
+                poster={SECURITY_POSTER_URL}
                 autoPlay
                 loop
                 muted
