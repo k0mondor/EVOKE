@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 
+import { publicAssetUrl } from '@/lib/assets'
 import { cn } from '@/lib/utils'
 
 const MAX_ANGLE = 3.5
@@ -327,7 +328,7 @@ export const RoomFocusSection = forwardRef<RoomFocusSectionHandle>(function Room
               <video
                 ref={videoRef}
                 className="room-video security-video"
-                src="/videos/guardnet-security-custom.mp4"
+                src={publicAssetUrl('videos/guardnet-security-custom.mp4')}
                 autoPlay
                 loop
                 muted

@@ -43,7 +43,7 @@ export const FinalBenefitsSection = () => {
   ]
   const highestMode = confidenceScores.reduce((highest, score) => (score.value > highest.value ? score : highest))
   const isAcquiring = ['connecting', 'running'].includes(runtimeStatus.acquisitionState)
-  const backendReady = connectionState === 'live'
+  const controlsReady = connectionState !== 'connecting'
   const connectionLabel =
     connectionState !== 'live'
       ? connectionState === 'connecting'
@@ -61,7 +61,9 @@ export const FinalBenefitsSection = () => {
           ? 'Source link'
           : 'Backend ready'
   const streamDetail =
-    runtimeStatus.streamState === 'partial_frame'
+    connectionState !== 'live'
+      ? commandMessage || 'Runs entirely in this browser'
+      : runtimeStatus.streamState === 'partial_frame'
       ? `${runtimeStatus.tcpPendingFrameBytes} / ${runtimeStatus.tcpExpectedFrameBytes} B`
       : runtimeStatus.streamState === 'streaming'
         ? `${runtimeStatus.tcpFramesReceived} frames · ${runtimeStatus.tcpBytesReceived} B`
@@ -236,7 +238,7 @@ export const FinalBenefitsSection = () => {
                       <button
                         type="button"
                         className="runtime-control-button runtime-control-button--start"
-                        disabled={!backendReady || isAcquiring}
+                        disabled={!controlsReady || isAcquiring}
                         onClick={() =>
                           sendCommand('start_acquisition', {
                             collection_window_count: collectionWindowCount,
@@ -244,12 +246,12 @@ export const FinalBenefitsSection = () => {
                           })
                         }
                       >
-                        Start acquisition
+                        {connectionState === 'live' ? 'Start acquisition' : 'Start live demo'}
                       </button>
                       <button
                         type="button"
                         className="runtime-control-button runtime-control-button--stop"
-                        disabled={!backendReady || !isAcquiring}
+                        disabled={!controlsReady || !isAcquiring}
                         onClick={() => sendCommand('stop_acquisition')}
                       >
                         Stop

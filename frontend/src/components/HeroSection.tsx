@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 
+import { publicAssetUrl } from '@/lib/assets'
+
 const NAV_ITEMS = [
   { label: 'VISION', href: '#landing' },
   { label: 'MODES', href: '#room-focus' },
@@ -159,7 +161,7 @@ export const HeroSection = () => {
         <video
           ref={videoRef}
           className="pointer-events-none h-full w-full object-cover [user-drag:none] [-webkit-user-drag:none]"
-          src="/videos/guardnet-hero-brain.mp4"
+          src={publicAssetUrl('videos/guardnet-hero-brain.mp4')}
           loop
           muted
           playsInline
@@ -203,7 +205,7 @@ export const HeroSection = () => {
               </span>
 
               <span className="hero-qr-card__expanded">
-                <img src="/images/evoke-community-qr.jpg" alt="EVOKE community group QR code" />
+                <img src={publicAssetUrl('images/evoke-community-qr.jpg')} alt="EVOKE community group QR code" />
                 <strong>SCAN TO JOIN</strong>
                 <small>EVOKE COMMUNITY</small>
               </span>

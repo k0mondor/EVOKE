@@ -100,12 +100,23 @@ const clamp = (value: number, minimum = 0, maximum = 100) =>
   Math.min(maximum, Math.max(minimum, value))
 
 function createDemoFrame(elapsedSeconds: number): BrainSignalFrame {
+  const probabilityWeights = [
+    0.72 + Math.sin(elapsedSeconds * 0.43) * 0.28,
+    0.72 + Math.sin(elapsedSeconds * 0.43 + 2.1) * 0.28,
+    0.72 + Math.sin(elapsedSeconds * 0.43 + 4.2) * 0.28,
+  ]
+  const probabilityTotal = probabilityWeights.reduce((sum, value) => sum + value, 0)
+
   return {
     timestamp: Date.now(),
     source: 'demo',
     signalQuality: Math.round(clamp(88 + Math.sin(elapsedSeconds * 0.25) * 5)),
     activity: clamp(0.48 + Math.sin(elapsedSeconds * 1.2) * 0.16, 0, 1),
-    probabilities: INITIAL_FRAME.probabilities,
+    probabilities: {
+      mode1: (probabilityWeights[0] / probabilityTotal) * 100,
+      mode2: (probabilityWeights[1] / probabilityTotal) * 100,
+      mode3: (probabilityWeights[2] / probabilityTotal) * 100,
+    },
     bands: {
       delta: clamp(0.24 + Math.sin(elapsedSeconds * 0.5) * 0.08, 0, 1),
       theta: clamp(0.36 + Math.sin(elapsedSeconds * 0.82 + 0.7) * 0.1, 0, 1),
@@ -369,22 +380,190 @@ export function useBrainSignal() {
   const [commandMessage, setCommandMessage] = useState('')
   const socketRef = useRef<WebSocket | null>(null)
   const runtimeStatusRef = useRef<BrainRuntimeStatus>(INITIAL_RUNTIME_STATUS)
+  const demoJobTimersRef = useRef<number[]>([])
+  const demoRunIdRef = useRef(0)
+  const demoLockedProbabilitiesRef = useRef<BrainSignalFrame['probabilities'] | null>(null)
+
+  const commitRuntimeStatus = useCallback(
+    (update: (current: BrainRuntimeStatus) => BrainRuntimeStatus) => {
+      const next = update(runtimeStatusRef.current)
+      runtimeStatusRef.current = next
+      setRuntimeStatus(next)
+    },
+    [],
+  )
+
+  const clearDemoJob = useCallback(() => {
+    demoRunIdRef.current += 1
+    demoJobTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    demoJobTimersRef.current = []
+  }, [])
+
+  const startDemoRun = useCallback((payload: Record<string, unknown>) => {
+    clearDemoJob()
+    demoLockedProbabilitiesRef.current = null
+
+    const runId = demoRunIdRef.current
+    const collectionTarget = Math.round(clamp(Number(payload.collection_window_count) || 3, 3, 50))
+    const inferenceTarget = Math.round(clamp(Number(payload.inference_window_count) || 1, 1, 50))
+    let collected = 0
+    let inferred = 0
+
+    const queue = (callback: () => void, delay: number) => {
+      const timer = window.setTimeout(callback, delay)
+      demoJobTimersRef.current.push(timer)
+    }
+
+    commitRuntimeStatus(() => ({
+      ...INITIAL_RUNTIME_STATUS,
+      sourceMode: 'demo',
+      acquisitionState: 'running',
+      inferenceState: 'collecting',
+      collectionWindowsTarget: collectionTarget,
+      windowsTarget: inferenceTarget,
+      streamState: 'streaming',
+      progress: 0,
+    }))
+    setCommandMessage('Browser-generated EEG stream is running.')
+
+    const finish = () => {
+      if (demoRunIdRef.current !== runId) {
+        return
+      }
+
+      const presets = [
+        { label: 'left', confidence: 0.78, values: [78, 14, 8] },
+        { label: 'right', confidence: 0.74, values: [17, 74, 9] },
+        { label: 'feet', confidence: 0.81, values: [11, 8, 81] },
+      ] as const
+      const result = presets[(runId - 1) % presets.length]
+      const lockedProbabilities = {
+        mode1: result.values[0],
+        mode2: result.values[1],
+        mode3: result.values[2],
+      }
+
+      demoLockedProbabilitiesRef.current = lockedProbabilities
+      setFrame((current) => ({
+        ...current,
+        timestamp: Date.now(),
+        source: 'demo',
+        activity: result.confidence,
+        probabilities: lockedProbabilities,
+      }))
+      commitRuntimeStatus((current) => ({
+        ...current,
+        acquisitionState: 'stopped',
+        inferenceState: 'complete',
+        windowsCollected: inferenceTarget,
+        progress: 1,
+        streamState: 'idle',
+        finalResult: {
+          label: result.label,
+          confidence: result.confidence,
+          probabilities: {
+            left: result.values[0] / 100,
+            right: result.values[1] / 100,
+            feet: result.values[2] / 100,
+          },
+          windowCount: inferenceTarget,
+          completedAt: Date.now(),
+        },
+      }))
+      setCommandMessage('Live demo inference completed in this browser.')
+    }
+
+    const infer = () => {
+      if (demoRunIdRef.current !== runId) {
+        return
+      }
+
+      inferred += 1
+      commitRuntimeStatus((current) => ({
+        ...current,
+        inferenceState: 'inferring',
+        windowsCollected: inferred,
+        progress: inferred / inferenceTarget,
+      }))
+
+      if (inferred < inferenceTarget) {
+        queue(infer, 560)
+      } else {
+        queue(finish, 420)
+      }
+    }
+
+    const collect = () => {
+      if (demoRunIdRef.current !== runId) {
+        return
+      }
+
+      collected += 1
+      commitRuntimeStatus((current) => ({
+        ...current,
+        collectionWindowsCollected: collected,
+        progress: (collected / collectionTarget) * 0.45,
+      }))
+
+      if (collected < collectionTarget) {
+        queue(collect, 520)
+      } else {
+        commitRuntimeStatus((current) => ({
+          ...current,
+          inferenceState: 'inferring',
+          windowsCollected: 0,
+          progress: 0,
+        }))
+        queue(infer, 560)
+      }
+    }
+
+    queue(collect, 420)
+  }, [clearDemoJob, commitRuntimeStatus])
+
+  const stopDemoRun = useCallback(() => {
+    clearDemoJob()
+    demoLockedProbabilitiesRef.current = null
+    commitRuntimeStatus((current) => ({
+      ...current,
+      acquisitionState: 'stopped',
+      inferenceState: ['collecting', 'inferring'].includes(current.inferenceState)
+        ? 'cancelled'
+        : current.inferenceState,
+      streamState: 'idle',
+    }))
+    setCommandMessage('Live demo acquisition stopped.')
+  }, [clearDemoJob, commitRuntimeStatus])
 
   const sendCommand = useCallback((command: string, payload: Record<string, unknown> = {}) => {
     const socket = socketRef.current
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setCommandMessage('Realtime backend is not connected.')
-      return false
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ command, ...payload }))
+      return true
     }
-    socket.send(JSON.stringify({ command, ...payload }))
-    return true
-  }, [])
+
+    if (command === 'start_acquisition') {
+      startDemoRun(payload)
+      return true
+    }
+    if (command === 'stop_acquisition') {
+      stopDemoRun()
+      return true
+    }
+
+    setCommandMessage('This command needs the optional realtime backend.')
+    return false
+  }, [startDemoRun, stopDemoRun])
 
   useEffect(() => {
-    const websocketUrl = (
-      import.meta.env.VITE_REALTIME_WS_URL ??
-      import.meta.env.VITE_BRAIN_SIGNAL_WS_URL
-    )?.trim()
+    const appMode = String(import.meta.env.VITE_APP_MODE ?? 'demo').trim().toLowerCase()
+    const websocketUrl =
+      appMode === 'realtime'
+        ? (
+            import.meta.env.VITE_REALTIME_WS_URL ??
+            import.meta.env.VITE_BRAIN_SIGNAL_WS_URL
+          )?.trim()
+        : undefined
     let demoTimer: number | undefined
     let reconnectTimer: number | undefined
     let socket: WebSocket | undefined
@@ -399,7 +578,11 @@ export function useBrainSignal() {
 
       setConnectionState('demo')
       demoTimer = window.setInterval(() => {
-        setFrame(createDemoFrame((performance.now() - demoStartedAt) / 1000))
+        const nextFrame = createDemoFrame((performance.now() - demoStartedAt) / 1000)
+        if (demoLockedProbabilitiesRef.current) {
+          nextFrame.probabilities = demoLockedProbabilitiesRef.current
+        }
+        setFrame(nextFrame)
       }, 120)
     }
 
@@ -420,6 +603,8 @@ export function useBrainSignal() {
       socket = new WebSocket(websocketUrl)
       socketRef.current = socket
       socket.addEventListener('open', () => {
+        clearDemoJob()
+        demoLockedProbabilitiesRef.current = null
         stopDemo()
         setConnectionState('live')
         socket?.send(JSON.stringify({ command: 'get_status' }))
@@ -500,6 +685,9 @@ export function useBrainSignal() {
         if (cancelled) {
           return
         }
+        clearDemoJob()
+        demoLockedProbabilitiesRef.current = null
+        commitRuntimeStatus(() => INITIAL_RUNTIME_STATUS)
         startDemo()
         reconnectTimer = window.setTimeout(connect, 2000)
       })
@@ -510,6 +698,7 @@ export function useBrainSignal() {
 
     return () => {
       cancelled = true
+      clearDemoJob()
       stopDemo()
       socket?.close()
       if (socketRef.current === socket) {
@@ -519,7 +708,7 @@ export function useBrainSignal() {
         window.clearTimeout(reconnectTimer)
       }
     }
-  }, [])
+  }, [clearDemoJob, commitRuntimeStatus])
 
   return { frame, connectionState, runtimeStatus, commandMessage, sendCommand }
 }

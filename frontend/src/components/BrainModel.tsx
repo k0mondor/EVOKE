@@ -9,8 +9,9 @@ import {
   resolveTopographySensors,
   type SensorPosition,
 } from '@/brainTopography'
+import { publicAssetUrl } from '@/lib/assets'
 
-const MODEL_URL = '/models/fsaverage-pial.glb'
+const MODEL_URL = publicAssetUrl('models/fsaverage-pial.glb')
 
 interface BrainModelProps {
   frame: BrainSignalFrame
